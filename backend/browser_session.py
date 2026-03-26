@@ -27,7 +27,9 @@ class FlowRecorder:
         self._start_wall: float = 0.0
 
     def start(self) -> str:
+        #create new flow id.. uuid
         self.flow_id = uuid.uuid4().hex[:10]
+        #create new firectry (setup directory path)
         self.flow_dir = FLOWS_DIR / self.flow_id
         (self.flow_dir / "frames").mkdir(parents=True, exist_ok=True)
         self.frame_count = 0
@@ -36,11 +38,15 @@ class FlowRecorder:
         self._start_perf = time.perf_counter()
         self._start_wall = time.time()
         self.recording = True
+        #start recording.
         return self.flow_id
 
     def save_frame(self, jpeg_b64: str):
+        #we only save frame if we are in recording mode, even if we run this funciton 
+        #at each display webscoket send, we will not store until we are recoridng.
         if not self.recording or self.flow_dir is None:
             return
+        #simmilar to how we record event ts, this records frame ts.
         ts = time.perf_counter() - self._start_perf
         frame_bytes = base64.b64decode(jpeg_b64)
         path = self.flow_dir / "frames" / f"{self.frame_count:07d}.jpg"
@@ -53,6 +59,7 @@ class FlowRecorder:
             return
         entry = dict(event)
         entry["t"] = time.perf_counter() - self._start_perf
+        #proper timestamp, both frames and input are recorded based on this timestamp only
         entry["wall"] = time.time()
         self.events.append(entry)
 
@@ -118,17 +125,22 @@ class FlowRecorder:
         self.recording = False
         assert self.flow_dir is not None
 
-        events_payload = {
-            "flow_id": self.flow_id,
-            "started_at": self._start_wall,
-            "fps": 20,
+        from db import flows_col
+        processed_events = self._assign_video_times(self._compress_scrolls(self.events))
+        flows_col().insert_one({
+            "flow_id":     self.flow_id,
+            "started_at":  self._start_wall,
+            "fps":         20,
             "frame_count": self.frame_count,
-            "events": self._assign_video_times(self._compress_scrolls(self.events)),
-        }
-        events_path = self.flow_dir / "events.json"
-        events_path.write_text(json.dumps(events_payload, indent=2))
+            "event_count": len(processed_events),
+            "events":      processed_events,
+            "tests":       None,
+        })
 
         mp4_path = self._encode_mp4()
+
+        import shutil
+        shutil.rmtree(self.flow_dir / "frames")
 
         return {
             "flow_id": self.flow_id,
@@ -172,10 +184,15 @@ class FlowRecorder:
         return mp4_path
 
 
+#main browser session endpoint sets up plyarwritgha nd displays pictures on the frotnend 
 @router.websocket("/ws/browser")
 async def browser_session(websocket: WebSocket):
     await websocket.accept()
     recorder = FlowRecorder()
+
+    #init flow recorder.
+
+    #initalize new playwritght session.
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -187,11 +204,15 @@ async def browser_session(websocket: WebSocket):
 
         frame_queue: asyncio.Queue = asyncio.Queue(maxsize=8)
 
+
+        #this queue is for diplay only.
         async def on_frame(params):
+            #display and also save frame. 
             recorder.save_frame(params["data"])
             if not frame_queue.full():
                 await frame_queue.put(params)
 
+        #screen shot frame. (on frame we check if queu is ful, if it is unload the oldest frames)
         client.on("Page.screencastFrame", on_frame)
         await client.send(
             "Page.startScreencast",
@@ -204,6 +225,7 @@ async def browser_session(websocket: WebSocket):
             },
         )
 
+        #async funciton to send frames to frontend via webscoket.
         async def send_frames():
             while True:
                 params = await frame_queue.get()
@@ -218,10 +240,12 @@ async def browser_session(websocket: WebSocket):
                 except Exception:
                     return
 
+        #handle any user events from the frtonoend.
         async def handle_events():
             loop = asyncio.get_event_loop()
             while True:
                 try:
+                    #frontned will keep sptting out texts via websocket for events and input.
                     raw = await websocket.receive_text()
                 except (WebSocketDisconnect, Exception):
                     return
@@ -234,6 +258,7 @@ async def browser_session(websocket: WebSocket):
                 t = msg.get("type")
 
                 # flow control
+                #if we are in crecord flow mode then we must record as well.
                 if t == "start_flow":
                     flow_id = recorder.start()
                     await websocket.send_json(
@@ -250,6 +275,7 @@ async def browser_session(websocket: WebSocket):
                 # record the event before executing it
                 recorder.record_event(msg)
 
+                #after recording the events, we can run it in our paywrigtn. seession.
                 try:
                     if t == "navigate":
                         url = msg["url"]
@@ -273,6 +299,7 @@ async def browser_session(websocket: WebSocket):
                 except Exception as e:
                     print(f"[browser] event error: {e}")
 
+        #our multi threaded taks.
         send_task = asyncio.create_task(send_frames())
         recv_task = asyncio.create_task(handle_events())
 

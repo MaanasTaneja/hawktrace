@@ -71,20 +71,32 @@ function FlowSidebar({ flows, selectedId, onSelect, onRefresh }) {
 function FlowViewer({ flowId }) {
   const videoRef     = useRef(null);
   const eventListRef = useRef(null);
-  const [eventsData, setEventsData] = useState(null);
+  const [eventsData, setEventsData]   = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration]       = useState(0);
   const [isPlaying, setIsPlaying]     = useState(false);
+
+  // tests state
+  const [tests, setTests]           = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [testsError, setTestsError] = useState(null);
+  const [testsTab, setTestsTab]     = useState("bdd"); // "bdd" | "playwright"
 
   const videoUrl = `${API_URL}/flows/${flowId}/video`;
 
   useEffect(() => {
     setEventsData(null);
     setCurrentTime(0);
+    setTests(null);
     fetch(`${API_URL}/flows/${flowId}/events`)
       .then((r) => r.json())
       .then(setEventsData)
       .catch(console.error);
+    // load existing tests if already generated
+    fetch(`${API_URL}/flows/${flowId}/tests`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => d && setTests(d))
+      .catch(() => {});
   }, [flowId]);
 
   useEffect(() => {
@@ -104,6 +116,25 @@ function FlowViewer({ flowId }) {
     setCurrentTime(t);
   };
 
+  const handleGenerateTests = async () => {
+    setGenerating(true);
+    setTestsError(null);
+    try {
+      const res = await fetch(`${API_URL}/flows/${flowId}/generate_tests`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(body.detail ?? res.statusText);
+      }
+      const data = await res.json();
+      setTests(data);
+      setTestsTab("bdd");
+    } catch (e) {
+      setTestsError(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const evList = eventsData?.events ?? [];
 
   const currentEventIdx = useMemo(() => {
@@ -115,7 +146,6 @@ function FlowViewer({ flowId }) {
     return idx;
   }, [evList, currentTime]);
 
-  // auto-scroll event list to current event
   useEffect(() => {
     if (!eventListRef.current || currentEventIdx < 0) return;
     const el = eventListRef.current.querySelector(`[data-idx="${currentEventIdx}"]`);
@@ -123,81 +153,122 @@ function FlowViewer({ flowId }) {
   }, [currentEventIdx]);
 
   return (
-    <div style={s.viewer}>
-      {/* left: video + timeline */}
-      <div style={s.viewerLeft}>
-        <div style={s.videoBox}>
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            onClick={() => (isPlaying ? videoRef.current.pause() : videoRef.current.play())}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onLoadedMetadata={(e) => setDuration(e.target.duration)}
-            style={{ maxWidth: "100%", maxHeight: "100%", cursor: "pointer", borderRadius: 4 }}
-          />
-        </div>
-
-        {/* scrubber */}
-        <div
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            seekTo(Math.max(0, Math.min(duration, ((e.clientX - rect.left) / rect.width) * duration)));
-          }}
-          style={s.scrubber}
-        >
-          {/* played */}
-          <div style={{ ...s.scrubberFill, width: duration ? `${(currentTime / duration) * 100}%` : 0 }} />
-          {/* event markers */}
-          {evList.map((ev, i) => (
-            <div
-              key={i}
-              title={EVENT_LABEL[ev.type]?.(ev) ?? ev.type}
-              style={{
+    <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      {/* video + events row */}
+      <div style={s.viewer}>
+        {/* left: video + scrubber */}
+        <div style={s.viewerLeft}>
+          <div style={s.videoBox}>
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              onClick={() => (isPlaying ? videoRef.current.pause() : videoRef.current.play())}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onLoadedMetadata={(e) => setDuration(e.target.duration)}
+              style={{ maxWidth: "100%", maxHeight: "100%", cursor: "pointer", borderRadius: 4 }}
+            />
+          </div>
+          <div
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              seekTo(Math.max(0, Math.min(duration, ((e.clientX - rect.left) / rect.width) * duration)));
+            }}
+            style={s.scrubber}
+          >
+            <div style={{ ...s.scrubberFill, width: duration ? `${(currentTime / duration) * 100}%` : 0 }} />
+            {evList.map((ev, i) => (
+              <div key={i} title={EVENT_LABEL[ev.type]?.(ev) ?? ev.type} style={{
                 position: "absolute",
                 left: duration ? `${((ev.video_t ?? ev.t) / duration) * 100}%` : 0,
-                top: 4, bottom: 4,
-                width: 2,
-                borderRadius: 1,
+                top: 4, bottom: 4, width: 2, borderRadius: 1,
                 background: EVENT_COLOR[ev.type] ?? "#888",
                 opacity: i === currentEventIdx ? 1 : 0.5,
-              }}
-            />
-          ))}
-          {/* playhead */}
-          <div style={{ position: "absolute", left: duration ? `${(currentTime / duration) * 100}%` : 0, top: 0, bottom: 0, width: 2, background: "#ef4444", transform: "translateX(-1px)" }} />
-          <span style={s.scrubberTime}>{fmt(currentTime)} / {fmt(duration)}</span>
+              }} />
+            ))}
+            <div style={{ position: "absolute", left: duration ? `${(currentTime / duration) * 100}%` : 0, top: 0, bottom: 0, width: 2, background: "#ef4444", transform: "translateX(-1px)" }} />
+            <span style={s.scrubberTime}>{fmt(currentTime)} / {fmt(duration)}</span>
+          </div>
         </div>
-      </div>
 
-      {/* right: event list */}
-      <div style={s.viewerRight}>
-        <div style={s.viewerRightHeader}>
-          EVENTS · {evList.length}
-        </div>
-        <div ref={eventListRef} style={s.eventList}>
-          {evList.map((ev, i) => {
-            const active = i === currentEventIdx;
-            const label  = EVENT_LABEL[ev.type]?.(ev) ?? ev.type;
-            const color  = EVENT_COLOR[ev.type] ?? "#888";
-            return (
-              <div
-                key={i}
-                data-idx={i}
-                onClick={() => seekTo(ev.video_t ?? ev.t)}
-                style={{
+        {/* right: event list */}
+        <div style={s.viewerRight}>
+          <div style={{ ...s.viewerRightHeader, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>EVENTS · {evList.length}</span>
+            <button
+              onClick={handleGenerateTests}
+              disabled={generating}
+              style={s.genBtn}
+            >
+              {generating ? "Generating…" : tests ? "Regenerate Tests" : "Generate Tests"}
+            </button>
+          </div>
+          <div ref={eventListRef} style={s.eventList}>
+            {evList.map((ev, i) => {
+              const active = i === currentEventIdx;
+              const label  = EVENT_LABEL[ev.type]?.(ev) ?? ev.type;
+              const color  = EVENT_COLOR[ev.type] ?? "#888";
+              return (
+                <div key={i} data-idx={i} onClick={() => seekTo(ev.video_t ?? ev.t)} style={{
                   ...s.eventItem,
                   background: active ? "#252525" : "transparent",
                   borderLeft: `2px solid ${active ? color : "transparent"}`,
-                }}
-              >
-                <span style={s.eventTime}>{fmt(ev.t)}</span>
-                <span style={{ ...s.eventLabel, color: active ? "#ddd" : "#888" }}>{label}</span>
-              </div>
-            );
-          })}
+                }}>
+                  <span style={s.eventTime}>{fmt(ev.t)}</span>
+                  <span style={{ ...s.eventLabel, color: active ? "#ddd" : "#888" }}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {/* tests panel */}
+      {(generating || tests) && (
+        <div style={s.testsPanel}>
+          <div style={s.testsPanelHeader}>
+            {["bdd", "playwright"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setTestsTab(tab)}
+                style={{
+                  ...s.testsTab,
+                  borderBottom: testsTab === tab ? "2px solid #4a90d9" : "2px solid transparent",
+                  color: testsTab === tab ? "#ddd" : "#555",
+                }}
+              >
+                {tab === "bdd" ? "BDD / Gherkin" : "Playwright Spec"}
+              </button>
+            ))}
+            {tests && (
+              <button
+                onClick={() => navigator.clipboard.writeText(testsTab === "bdd" ? tests.bdd : tests.playwright)}
+                style={s.copyBtn}
+              >
+                Copy
+              </button>
+            )}
+          </div>
+
+          <div style={s.testsBody}>
+            {testsError && (
+              <div style={{ padding: 16, color: "#fc8181", fontSize: 12, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+                Error: {testsError}
+              </div>
+            )}
+            {generating && !tests && !testsError && (
+              <div style={s.testsLoading}>
+                Uploading video to Gemini and generating tests — this takes ~60s…
+              </div>
+            )}
+            {tests && (
+              <pre style={s.codeBlock}>
+                {testsTab === "bdd" ? tests.bdd : tests.playwright}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -406,4 +477,16 @@ const s = {
   eventItem: { padding: "5px 12px", cursor: "pointer", display: "flex", gap: 10, alignItems: "baseline" },
   eventTime: { color: "#444", fontSize: 10, fontFamily: "monospace", flexShrink: 0 },
   eventLabel: { fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+
+  // generate tests button
+  genBtn: { padding: "4px 10px", borderRadius: 5, background: "#1a3a5c", color: "#4a90d9", border: "1px solid #1e4a7a", cursor: "pointer", fontSize: 11, fontWeight: 600, flexShrink: 0 },
+
+  // tests panel
+  testsPanel: { borderTop: "1px solid #252525", background: "#111", display: "flex", flexDirection: "column", maxHeight: 360 },
+  testsPanelHeader: { display: "flex", alignItems: "center", gap: 4, padding: "0 12px", borderBottom: "1px solid #252525", background: "#141414", flexShrink: 0 },
+  testsTab: { padding: "8px 12px", background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, letterSpacing: 0.5 },
+  copyBtn: { marginLeft: "auto", padding: "4px 10px", borderRadius: 5, background: "#252525", color: "#666", border: "1px solid #333", cursor: "pointer", fontSize: 11 },
+  testsBody: { flex: 1, overflow: "auto" },
+  testsLoading: { padding: 24, color: "#555", fontSize: 13, textAlign: "center" },
+  codeBlock: { margin: 0, padding: 16, fontSize: 12, lineHeight: 1.6, fontFamily: "monospace", color: "#ccc", background: "transparent", whiteSpace: "pre-wrap", wordBreak: "break-word" },
 };

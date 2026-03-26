@@ -26,6 +26,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+#three routeers rn pipeline broswer session and flows.
 app.include_router(pipeline_router)
 app.include_router(browser_router)
 app.include_router(flows_router)

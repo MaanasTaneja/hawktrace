@@ -1,0 +1,21 @@
+# env
+.env
+.env.*
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# recorded flows
+backend/flows/
+
+# node
+frontend/node_modules/
+frontend/.next/
+
+# misc
+.DS_Store

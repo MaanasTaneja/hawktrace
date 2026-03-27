@@ -12,5 +12,7 @@ def get_client() -> MongoClient:
     return _client
 
 
+#this is not good. we need to do it, user specific, like in each users foder we save flows.
+#different project
 def flows_col() -> Collection:
     return get_client()["hawktrace"]["flows"]

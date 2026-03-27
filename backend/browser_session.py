@@ -4,6 +4,7 @@ import json
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from playwright.async_api import async_playwright
@@ -18,8 +19,8 @@ FLOWS_DIR = Path("flows")
 class FlowRecorder:
     def __init__(self):
         self.recording = False
-        self.flow_id: str | None = None
-        self.flow_dir: Path | None = None
+        self.flow_id: Optional[str] = None
+        self.flow_dir: Optional[Path] = None
         self.frame_count = 0
         self.events: list[dict] = []
         self.frame_timestamps: list[float] = []  # perf_counter ts for each saved frame
@@ -121,7 +122,8 @@ class FlowRecorder:
             i = j
         return result
 
-    def stop(self) -> dict:
+    def stop_fast(self) -> dict:
+        """Stop recording and persist events to DB. Returns immediately."""
         self.recording = False
         assert self.flow_dir is not None
 
@@ -137,17 +139,21 @@ class FlowRecorder:
             "tests":       None,
         })
 
-        mp4_path = self._encode_mp4()
-
-        import shutil
-        shutil.rmtree(self.flow_dir / "frames")
-
         return {
             "flow_id": self.flow_id,
             "frame_count": self.frame_count,
-            "mp4": str(mp4_path),
-            "events": str(events_path),
         }
+
+    def encode_and_cleanup(self):
+        """Encode MP4 and delete raw frames. Run in a background thread."""
+        try:
+            self._encode_mp4()
+        except Exception as e:
+            print(f"[flow] mp4 encode error: {e}")
+        finally:
+            import shutil
+            if self.flow_dir and (self.flow_dir / "frames").exists():
+                shutil.rmtree(self.flow_dir / "frames")
 
     def _encode_mp4(self) -> Path:
         import av
@@ -268,8 +274,20 @@ async def browser_session(websocket: WebSocket):
 
                 if t == "end_flow":
                     if recorder.recording:
-                        result = await loop.run_in_executor(None, recorder.stop)
-                        await websocket.send_json({"type": "flow_ended", **result})
+                        try:
+                            result = await loop.run_in_executor(None, recorder.stop_fast)
+                            await websocket.send_json({"type": "flow_ended", **result})
+                            fid = result["flow_id"]
+                            async def _encode_then_notify(flow_id=fid):
+                                await loop.run_in_executor(None, recorder.encode_and_cleanup)
+                                try:
+                                    await websocket.send_json({"type": "mp4_ready", "flow_id": flow_id})
+                                except Exception:
+                                    pass
+                            asyncio.create_task(_encode_then_notify())
+                        except Exception as e:
+                            print(f"[flow] stop error: {e}")
+                            await websocket.send_json({"type": "flow_ended", "flow_id": recorder.flow_id, "error": str(e)})
                     continue
 
                 # record the event before executing it

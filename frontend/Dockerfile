@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 3001
 
-CMD ["npm", "run", "dev", "--", "-p", "3001"]
+CMD ["npx", "vite", "--host", "--port", "3001"]

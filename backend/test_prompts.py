@@ -4,6 +4,25 @@ Analyze the recording carefully — identify the pages visited, UI elements inte
 
 Generate two outputs:
 
+IMPORTANT RULES FOR ASSERTIONS:
+- Never assert specific text content that comes from a database or CMS
+  (article titles, product names, prices, user generated content)
+- Always assert structural elements that should always exist
+  (section headings, navigation, at least one item in a list, buttons)
+- For lists and feeds assert count > 0 not specific items
+- For content websites use: expect(locator.first()).toBeVisible()
+  not expect(page.getByText('specific article title')).toBeVisible()
+- If the recorded content looks dynamic (news, products, posts)
+  generate count-based assertions not content-based ones
+
+
+SCROLL HANDLING RULES:
+- Never use scrollBy with hardcoded pixel values to reach a specific element
+- Instead use: await page.locator('target element').scrollIntoViewIfNeeded()
+- Only use scrollBy for testing scroll behavior itself like infinite scroll or lazy loading
+- Replace waitForTimeout with waitForLoadState or expect().toBeVisible() with timeout
+- Hardcoded timeouts over 500ms are always a sign something better exists
+
 ---
 
 ## PART 1 — BDD Test Scenarios (Gherkin)

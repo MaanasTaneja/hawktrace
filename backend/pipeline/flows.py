@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from db import flows_col
+from database.mongodb import flows_col
 
 
 class RenameBody(BaseModel):
@@ -116,7 +116,7 @@ def delete_flow(flow_id: str):
 @router.post("/{flow_id}/generate_tests")
 async def generate_tests(flow_id: str):
     import traceback
-    from test_generator import generate_tests_for_flow
+    from .test_generator import generate_tests_for_flow
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(None, generate_tests_for_flow, flow_id)

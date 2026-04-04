@@ -43,7 +43,7 @@ class FlowRecorder:
         return self.flow_id
 
     def save_frame(self, jpeg_b64: str):
-        #we only save frame if we are in recording mode, even if we run this funciton 
+        #we only save frame if we are in recording mode, even if we run this funciton
         #at each display webscoket send, we will not store until we are recoridng.
         if not self.recording or self.flow_dir is None:
             return
@@ -127,7 +127,7 @@ class FlowRecorder:
         self.recording = False
         assert self.flow_dir is not None
 
-        from db import flows_col
+        from database.mongodb import flows_col
         processed_events = self._assign_video_times(self._compress_scrolls(self.events))
         flows_col().insert_one({
             "flow_id":     self.flow_id,
@@ -190,7 +190,7 @@ class FlowRecorder:
         return mp4_path
 
 
-#main browser session endpoint sets up plyarwritgha nd displays pictures on the frotnend 
+#main browser session endpoint sets up plyarwritgha nd displays pictures on the frotnend
 @router.websocket("/ws/browser")
 async def browser_session(websocket: WebSocket):
     await websocket.accept()
@@ -213,7 +213,7 @@ async def browser_session(websocket: WebSocket):
 
         #this queue is for diplay only.
         async def on_frame(params):
-            #display and also save frame. 
+            #display and also save frame.
             recorder.save_frame(params["data"])
             if not frame_queue.full():
                 await frame_queue.put(params)

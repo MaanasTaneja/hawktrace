@@ -55,7 +55,7 @@ def analyze_webpage(body: GenerateRequest, request: Request):
     jobs_kv_store[job_id] = {"status": "starting", "url": None, "error": None}
     #need to execute the pipeline in another thread, the run piepline funciton is. blocking
     #and will execute and keep chaning status of our job as we progress through pieplien
-    #we track status through the job key value store. 
+    #we track status through the job key value store.
 
     executor.submit(_run_pipeline, job_id)
     return {"job_id": job_id}

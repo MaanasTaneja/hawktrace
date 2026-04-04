@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from test_prompts import TEST_GENERATION_PROMPT
+from .test_prompts import TEST_GENERATION_PROMPT
 
 load_dotenv()
 
@@ -99,7 +99,7 @@ def _parse_response(raw: str) -> tuple[str, str]:
 
 
 def generate_tests_for_flow(flow_id: str) -> dict:
-    from db import flows_col
+    from database.mongodb import flows_col
 
     doc = flows_col().find_one({"flow_id": flow_id})
     if not doc:

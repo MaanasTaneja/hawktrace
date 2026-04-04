@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from pipeline import router as pipeline_router
-from browser_session import router as browser_router
-from flows import router as flows_router
+from pipeline.pipeline_router import router as pipeline_router
+from pipeline.browser_session import router as browser_router
+from pipeline.flows import router as flows_router
 
 load_dotenv()
 

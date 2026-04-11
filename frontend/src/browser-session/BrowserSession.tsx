@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Circle, Square, Monitor, Trash2, Pencil, Check, X } from 'lucide-react';
 import logo from '../assets/HawkTrace-Logo.png';
 
-const BACKEND_WS = 'ws://localhost:8001/ws/browser';
-const BACKEND_HTTP = 'http://localhost:8001';
+import { BACKEND, authFetch, getToken } from '../api';
+const BACKEND_HTTP = BACKEND;
 
 type ConnStatus = 'connecting' | 'connected' | 'disconnected';
 type RecordingState = 'idle' | 'recording';
@@ -46,7 +46,7 @@ export const BrowserSession: React.FC<BrowserSessionProps> = ({ onBack, onViewTe
 
   const loadFlows = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_HTTP}/flows/`);
+      const res = await authFetch(`${BACKEND_HTTP}/flows/all`);
       const data = await res.json();
       if (mountedRef.current) setFlows(data);
     } catch {}
@@ -55,7 +55,7 @@ export const BrowserSession: React.FC<BrowserSessionProps> = ({ onBack, onViewTe
   const handleDeleteFlow = useCallback(async (flowId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await fetch(`${BACKEND_HTTP}/flows/${flowId}`, { method: 'DELETE' });
+      await authFetch(`${BACKEND_HTTP}/flows/${flowId}`, { method: 'DELETE' });
       setFlows(prev => prev.filter(f => f.flow_id !== flowId));
     } catch {}
   }, []);
@@ -70,7 +70,7 @@ export const BrowserSession: React.FC<BrowserSessionProps> = ({ onBack, onViewTe
     const trimmed = renameValue.trim();
     if (trimmed) {
       try {
-        await fetch(`${BACKEND_HTTP}/flows/${flowId}/rename`, {
+        await authFetch(`${BACKEND_HTTP}/flows/${flowId}/rename`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: trimmed }),
@@ -91,7 +91,9 @@ export const BrowserSession: React.FC<BrowserSessionProps> = ({ onBack, onViewTe
     const connect = () => {
       if (!mountedRef.current) return;
       setConnStatus('connecting');
-      const ws = new WebSocket(BACKEND_WS);
+      const token = getToken();
+      const wsUrl = `ws://localhost:8001/ws/browser${token ? `?token=${token}` : ''}`;
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {

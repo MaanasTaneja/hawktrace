@@ -2,34 +2,27 @@ import { useState, useEffect } from 'react';
 import { LandingPage } from './landing-page/LandingPage';
 import { SignUp } from './auth/SignUp';
 import { SignIn } from './auth/SignIn';
-import { Onboarding, type UserProfile } from './onboarding/Onboarding';
 import { Dashboard } from './dashboard/Dashboard';
 import { BrowserSession } from './browser-session/BrowserSession';
 import { TestSuites } from './test-suites/TestSuites';
 import { Settings } from './settings/Settings';
+import { getToken, getStoredUser, clearAuth, setToken, setStoredUser, type StoredUser } from './api';
+import type { UserProfile } from './onboarding/Onboarding';
 
-type View = 'landing' | 'signup' | 'signin' | 'onboarding' | 'dashboard' | 'browser-session' | 'test-suites' | 'settings';
+type View = 'landing' | 'signup' | 'signin' | 'dashboard' | 'browser-session' | 'test-suites' | 'settings';
 
-const PROFILE_KEY = 'hawktrace_user_profile';
-
-function loadProfile(): UserProfile | null {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+function storedUserToProfile(user: StoredUser | null): UserProfile {
+  return {
+    name: user?.username ?? '',
+    position: '',
+    company: user?.company ?? '',
+  };
 }
 
 export function App() {
-  const [view, setView] = useState<View>(() => {
-    const profile = loadProfile();
-    return profile ? 'dashboard' : 'landing';
-  });
+  const [view, setView] = useState<View>(() => getToken() ? 'dashboard' : 'landing');
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile>(
-    () => loadProfile() ?? { name: '', position: '', company: '' }
-  );
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => storedUserToProfile(getStoredUser()));
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -55,8 +48,10 @@ export function App() {
     if (push) window.history.pushState({ view: newView, flowId }, '');
   };
 
-  const handleOnboardingComplete = (profile: UserProfile) => {
-    setUserProfile(profile);
+  const handleAuthSuccess = (user: StoredUser, token: string) => {
+    setToken(token);
+    setStoredUser(user);
+    setUserProfile(storedUserToProfile(user));
     navigateTo('dashboard');
   };
 
@@ -65,7 +60,7 @@ export function App() {
   };
 
   const handleSignOut = () => {
-    localStorage.removeItem(PROFILE_KEY);
+    clearAuth();
     setUserProfile({ name: '', position: '', company: '' });
     navigateTo('landing');
   };
@@ -75,6 +70,7 @@ export function App() {
       <SignUp
         onSignInClick={() => navigateTo('signin')}
         onBack={() => window.history.length > 1 ? window.history.back() : navigateTo('landing')}
+        onSuccess={handleAuthSuccess}
       />
     );
   }
@@ -84,15 +80,7 @@ export function App() {
       <SignIn
         onSignUpClick={() => navigateTo('signup')}
         onBack={() => window.history.length > 1 ? window.history.back() : navigateTo('landing')}
-      />
-    );
-  }
-
-  if (view === 'onboarding') {
-    return (
-      <Onboarding
-        onComplete={handleOnboardingComplete}
-        onBack={() => navigateTo('landing')}
+        onSuccess={handleAuthSuccess}
       />
     );
   }
@@ -141,7 +129,7 @@ export function App() {
   return (
     <LandingPage
       onSignInClick={() => navigateTo('signin')}
-      onGetStarted={() => navigateTo('onboarding')}
+      onGetStarted={() => navigateTo('signup')}
     />
   );
 }

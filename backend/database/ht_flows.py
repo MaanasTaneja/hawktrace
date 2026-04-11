@@ -22,7 +22,7 @@ db = PostgresDB(DATABASE_URL)
 def get_flow_by_id(session: Session, flow_id: str) -> FlowsTable | None:
     return session.get(FlowsTable, flow_id)
 
-
+#get all flows
 def get_flows(session: Session, limit: int = 200) -> list[FlowsTable]:
     return (
         session.query(FlowsTable)
@@ -31,7 +31,7 @@ def get_flows(session: Session, limit: int = 200) -> list[FlowsTable]:
         .all()
     )
 
-
+#get flows for a particular user. 
 def get_flows_for_user(session: Session, user_id: int, limit: int = 200) -> list[FlowsTable]:
     return (
         session.query(FlowsTable)
@@ -41,7 +41,7 @@ def get_flows_for_user(session: Session, user_id: int, limit: int = 200) -> list
         .all()
     )
 
-
+#get flows absed on flow idf 
 def get_tests_by_flow_id(session: Session, flow_id: str) -> GeneratedTestsTable | None:
     return (
         session.query(GeneratedTestsTable)
@@ -49,7 +49,7 @@ def get_tests_by_flow_id(session: Session, flow_id: str) -> GeneratedTestsTable 
         .first()
     )
 
-
+#rename flow self explanatory
 def rename_flow(session: Session, flow_id: str, name: str) -> FlowsTable | None:
     flow = get_flow_by_id(session, flow_id)
     if not flow:
@@ -60,6 +60,7 @@ def rename_flow(session: Session, flow_id: str, name: str) -> FlowsTable | None:
     return flow
 
 
+#delete flow for a user same shit
 def delete_flow(session: Session, flow_id: str) -> bool:
     flow = get_flow_by_id(session, flow_id)
     if not flow:
@@ -69,6 +70,8 @@ def delete_flow(session: Session, flow_id: str) -> bool:
     return True
 
 
+
+#main logic where we uspert generated text need to change this to upsert flow information (json of flow desciprtin and agent receipe)
 def upsert_generated_tests(
     session: Session,
     flow_id: str,
@@ -101,6 +104,7 @@ def upsert_generated_tests(
 
 
 def load_flow_events(events_path: str) -> list[dict]:
+    #load json flow events path from s3 or otherwise.
     path = Path(events_path)
     if not path.exists():
         raise FileNotFoundError(f"Events file not found: {events_path}")
@@ -111,6 +115,8 @@ def load_flow_events(events_path: str) -> list[dict]:
     return data
 
 
+#main upsert flow record into table, the uperset genertets test is an async operation that happens when user wants us to generatethe agent
+#keep tehm sperate. upsert agent repcie later.
 def upsert_recorded_flow(
     session: Session,
     flow_id: str,

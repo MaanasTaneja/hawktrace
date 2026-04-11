@@ -22,3 +22,5 @@ SQLAlchemy
 psycopg[binary]
 PyJWT
 passlib[bcrypt]
+bcrypt==4.0.1
+python-multipart

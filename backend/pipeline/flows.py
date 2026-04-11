@@ -35,7 +35,7 @@ def _flow_video_path(flow_id: str, video_path: str | None) -> Path:
     return Path("flows") / flow_id / f"{flow_id}.mp4"
 
 
-@router.get("/", response_model=list[FlowListItem])
+@router.get("/all", response_model=list[FlowListItem])
 def list_flows(current_user: UserRead = Depends(get_current_user)):
     with db.get_session() as session:
         rows = get_flows_for_user(session, current_user.id)
@@ -53,6 +53,7 @@ def list_flows(current_user: UserRead = Depends(get_current_user)):
 
 
 @router.api_route("/{flow_id}/video", methods=["GET", "HEAD"])
+#get pecific video form a flow
 def get_video(
     flow_id: str,
     request: Request,
@@ -60,10 +61,12 @@ def get_video(
 ):
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
+        #if current user id is not the flow user id then we wil lnot show this one
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
         mp4 = _flow_video_path(flow_id, flow.video_path)
 
+    #video doesnt exist in s3 or local
     if not mp4.exists():
         raise HTTPException(status_code=404, detail="Video not found")
 
@@ -88,7 +91,7 @@ def get_video(
                             break
                         remaining -= len(chunk)
                         yield chunk
-
+            #stremaing reposne back to frontend
             return StreamingResponse(
                 iter_file(),
                 status_code=206,
@@ -120,6 +123,7 @@ def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user))
         except ValueError as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+        #return the flow events from our 
         return FlowEventsRead(
             flow_id=flow.id,
             started_at=flow.started_at.timestamp(),
@@ -129,7 +133,7 @@ def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user))
             events=events,
         )
 
-
+#reutnr the flow test / or agent recipe.
 @router.get("/{flow_id}/tests", response_model=FlowTestsRead)
 def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
     with db.get_session() as session:
@@ -175,6 +179,7 @@ def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)
     return FlowDeleteRead(deleted=flow_id)
 
 
+#call t geneate the agent recipe for this flow, maiing sure we are currently logged in and have auser. token active
 @router.post("/{flow_id}/generate_tests")
 async def generate_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
     import traceback

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from .test_prompts import TEST_GENERATION_PROMPT
+from prompts import TEST_GENERATION_PROMPT
 from database.ht_flows import db, get_flow_by_id, load_flow_events, upsert_generated_tests
 
 load_dotenv()

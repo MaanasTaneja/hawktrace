@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Copy, Download, Check, Loader2, Play } from 'lucide-react';
 import logo from '../assets/HawkTrace-Logo.png';
 
-const BACKEND = 'http://localhost:8001';
+import { BACKEND, authFetch } from '../api';
 
 interface FlowMeta {
   flow_id: string;
@@ -61,12 +61,13 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
   const stageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const videoPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFlows = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND}/flows/`);
+      const res = await authFetch(`${BACKEND}/flows/all`);
       const data = await res.json();
       setFlows(data);
     } catch { }
@@ -85,7 +86,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
     setVideoReady(false);
     const check = async () => {
       try {
-        const res = await fetch(`${BACKEND}/flows/${flowId}/video`, { method: 'HEAD' });
+        const res = await authFetch(`${BACKEND}/flows/${flowId}/video`, { method: 'HEAD' });
         if (res.ok) { setVideoReady(true); return; }
       } catch {}
       videoPollRef.current = setTimeout(check, 2000);
@@ -95,22 +96,41 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
 
   useEffect(() => () => { if (videoPollRef.current) clearTimeout(videoPollRef.current); }, []);
 
+  useEffect(() => {
+    if (!videoReady || !selectedFlowId) return;
+    let cancelled = false;
+    let objectUrl = '';
+    authFetch(`${BACKEND}/flows/${selectedFlowId}/video`)
+      .then(r => r.blob())
+      .then(blob => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setVideoBlobUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [videoReady, selectedFlowId]);
+
   const loadFlow = useCallback(async (flowId: string) => {
     setFlowDetail(null);
     setTests(null);
     setGenerationStage('idle');
     setCurrentVideoTime(0);
     setVideoDuration(0);
+    setVideoBlobUrl(null);
     pollVideoReady(flowId);
 
     try {
-      const eventsRes = await fetch(`${BACKEND}/flows/${flowId}/events`);
+      const eventsRes = await authFetch(`${BACKEND}/flows/${flowId}/events`);
       if (!eventsRes.ok) return;
       const detail: FlowDetail = await eventsRes.json();
       setFlowDetail(detail);
 
       // Always try to fetch tests — don't rely on stale flows list
-      const testsRes = await fetch(`${BACKEND}/flows/${flowId}/tests`);
+      const testsRes = await authFetch(`${BACKEND}/flows/${flowId}/tests`);
       if (testsRes.ok) {
         const testsData = await testsRes.json();
         setTests({ bdd: testsData.bdd, playwright: testsData.playwright });
@@ -134,7 +154,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
     ];
 
     try {
-      const res = await fetch(`${BACKEND}/flows/${selectedFlowId}/generate_tests`, { method: 'POST' });
+      const res = await authFetch(`${BACKEND}/flows/${selectedFlowId}/generate_tests`, { method: 'POST' });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       stageTimersRef.current.forEach(clearTimeout);
@@ -298,7 +318,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
 
             {/* Video + event timeline */}
             <div className="bg-white border border-sand rounded-2xl overflow-hidden shadow-sm">
-              {!videoReady ? (
+              {!videoBlobUrl ? (
                 <div className="w-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-3 py-16">
                   <Loader2 size={28} className="text-burnt animate-spin" />
                   <p className="text-[13px] font-sans text-[#888]">We're loading your recording, just a sec…</p>
@@ -306,7 +326,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
               ) : (
                 <video
                   ref={videoRef}
-                  src={`${BACKEND}/flows/${flowDetail.flow_id}/video`}
+                  src={videoBlobUrl}
                   controls
                   className="w-full bg-black"
                   onTimeUpdate={(e) => setCurrentVideoTime(e.currentTarget.currentTime)}

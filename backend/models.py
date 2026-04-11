@@ -10,16 +10,18 @@ class UserBase(BaseModel):
     company: str
     email: str
 
-
+#create will have an additional password since this is sent uptoo tje backend freom frotnoend to registe a user.
 class UserCreate(UserBase):
-    password_hash: str
+    password: str 
 
 
+#only read wil hgave id and created at since reading from db a user means this user is created.
 class UserRead(UserBase):
     id: int
     created_at: float
 
 
+#added user updaye as well just inc asee. no need to delet users though
 class UserUpdate(BaseModel):
     id: int
     username: str | None = None

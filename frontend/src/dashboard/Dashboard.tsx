@@ -15,7 +15,7 @@ import { RecentTestRuns, type Flow } from './components/RecentTestRuns.tsx';
 import { RefinedStatCard } from './components/RefinedStatCard.tsx';
 import type { UserProfile } from '../onboarding/Onboarding.tsx';
 
-const BACKEND = 'http://localhost:8001';
+import { BACKEND, authFetch } from '../api';
 
 interface DashboardProps {
   onSignOut: () => void;
@@ -31,7 +31,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    fetch(`${BACKEND}/flows/`)
+    authFetch(`${BACKEND}/flows/all`)
       .then(r => r.json())
       .then(data => setFlows(Array.isArray(data) ? data : []))
       .catch(() => setFlows([]))

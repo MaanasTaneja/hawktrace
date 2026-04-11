@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from database.ht_postgres import UserTable
 from models import UserCreate, UserRead, UserUpdate
 
-
 def _to_user_read(user: UserTable) -> UserRead:
     return UserRead(
         id=user.id,
@@ -14,13 +13,12 @@ def _to_user_read(user: UserTable) -> UserRead:
         created_at=user.created_at.timestamp(),
     )
 
-
 def insert_user(session: Session, user: UserCreate) -> UserRead | None:
     new_user = UserTable(
         username=user.username,
         company=user.company,
         email=user.email,
-        password_hash=user.password_hash,
+        password_hash=user.password,
     )
     try:
         session.add(new_user)

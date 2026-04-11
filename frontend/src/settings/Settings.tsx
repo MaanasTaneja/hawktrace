@@ -251,7 +251,6 @@ const WorkspaceSection: React.FC = () => {
 /* ── Danger Zone ── */
 const DangerSection: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
   const handleClearProfile = () => {
-    localStorage.removeItem('hawktrace_user_profile');
     onSignOut();
   };
 

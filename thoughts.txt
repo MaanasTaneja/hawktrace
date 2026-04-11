@@ -1,0 +1,61 @@
+
+'''
+
+now i think the best way to do this is...
+
+have a a few tabels
+
+probbaly first the user thign needs to be made
+
+usertable
+-username
+-company
+-email
+-password
+-created_at
+-flows
+
+then ofocuse
+
+flows will point to the flows table, where we store dta about each flows that this user has generated.
+
+flows_table
+-flow_id
+-flow_name
+-user_id (which user this flow is assocoated wth) this is our foriegn key
+-started_at
+-fps
+-frame_count 
+-event_count
+-events_json_file
+-video_path_file
+
+both events json file nad video path file stored on disk? or s3? i think just make like file strcutuere
+/users/user_id/flows/flow_id
+
+and it could be either localhost/users
+or s3link users/
+
+which we cna attach as a env varibale in docker or like env file load. depdening on where this is lcoal or prod.
+
+
+and in flows crud, we can have getting this and that etc, and then authentication layer needs ot be there?
+get jwt token? see which user logged in? but how does that work? i dont know.? encode jwt payload? after deocde etc.
+
+kpay so that makes sense to me.
+
+remove mongo.
+
+
+'''
+
+
+curl -X POST http://localhost:8001/users/token \                                                                                                    
+    -H "Content-Type: application/x-www-form-urlencoded" \                                                                                          
+    -d "username=testuser&password=secret123"
+    -v
+
+curl http://localhost:8001/users/me -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwiZXhwIjoxNzc1OTQ0MTg0fQ.alhFf0ZBNxxc0gRetjw8jBExCcLnx9YOakefvHYSCz4"
+
+
+curl http://localhost:8001/flows/all -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwiZXhwIjoxNzc1OTQ0MTg0fQ.alhFf0ZBNxxc0gRetjw8jBExCcLnx9YOakefvHYSCz4"

@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from pipeline import router as pipeline_router
-from browser_session import router as browser_router
-from flows import router as flows_router
+from pipeline.browser_session import router as browser_router
+from pipeline.flows import router as flows_router
+from users.users import user_router
 
 load_dotenv()
 
@@ -26,11 +26,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-#three routeers rn pipeline broswer session and flows.
-app.include_router(pipeline_router)
 app.include_router(browser_router)
 app.include_router(flows_router)
+app.include_router(user_router)
 
 
 @app.get("/")

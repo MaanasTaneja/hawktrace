@@ -10,6 +10,7 @@ from google import genai
 from google.genai import types
 
 from .test_prompts import TEST_GENERATION_PROMPT
+from database.ht_flows import db, get_flow_by_id, load_flow_events, upsert_generated_tests
 
 load_dotenv()
 
@@ -99,17 +100,18 @@ def _parse_response(raw: str) -> tuple[str, str]:
 
 
 def generate_tests_for_flow(flow_id: str) -> dict:
-    from database.mongodb import flows_col
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow:
+            raise FileNotFoundError(f"Flow {flow_id} not found in database")
+        events = load_flow_events(flow.events_path)
+        fps = flow.fps
+        mp4_path = Path(flow.video_path) if flow.video_path else (FLOWS_DIR / flow_id / f"{flow_id}.mp4")
 
-    doc = flows_col().find_one({"flow_id": flow_id})
-    if not doc:
-        raise FileNotFoundError(f"Flow {flow_id} not found in database")
-
-    mp4_path = FLOWS_DIR / flow_id / f"{flow_id}.mp4"
     if not mp4_path.exists():
         raise FileNotFoundError(f"MP4 not found for flow {flow_id}")
 
-    clean_events = _format_events(doc.get("events", []))
+    clean_events = _format_events(events)
     events_json  = json.dumps(clean_events, indent=2)
 
     print(f"[tests] uploading {mp4_path} to Gemini...")
@@ -117,12 +119,20 @@ def generate_tests_for_flow(flow_id: str) -> dict:
 
     print(f"[tests] calling Gemini for flow {flow_id}...")
     prompt = TEST_GENERATION_PROMPT.format(events_json=events_json)
-    raw    = _call_gemini(file_uri, prompt, fps=doc.get("fps", 20))
+    raw    = _call_gemini(file_uri, prompt, fps=fps)
 
     bdd, playwright = _parse_response(raw)
 
-    tests = {"bdd": bdd, "playwright": playwright}
-    flows_col().update_one({"flow_id": flow_id}, {"$set": {"tests": tests}})
-    print(f"[tests] saved tests to MongoDB for flow {flow_id}")
+    with db.get_session() as session:
+        saved = upsert_generated_tests(
+            session=session,
+            flow_id=flow_id,
+            bdd_text=bdd,
+            playwright_text=playwright,
+            model_name="gemini-3.1-pro-preview",
+        )
+        if not saved:
+            raise FileNotFoundError(f"Flow {flow_id} not found in database")
+    print(f"[tests] saved tests to Postgres for flow {flow_id}")
 
-    return {"flow_id": flow_id, **tests}
+    return {"flow_id": flow_id, "bdd": bdd, "playwright": playwright}

@@ -7,8 +7,25 @@ services:
       - mongo_data:/data/db
     restart: unless-stopped
 
+  postgresdb:
+    image: postgres:15
+    container_name: hawtrace_postgres
+    ports:
+      -"5432:5432"
+    environment:
+      POSTGRES_USER: ht_admin
+      POSTGRES_PASSWORD: ht_admin_pass
+      POSTGRES_DB: ht_db
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist data across container restarts, wihtout this everythig stored
+      #in virtual container and wiped on restart, here stored on host machine
+    restart : always
+
+
   backend:
     build: ./backend
+    container_name: hawktrace_webservice
     ports:
       - "8001:8001"
     env_file:
@@ -23,6 +40,7 @@ services:
 
   frontend:
     build: ./frontend
+    container_name: hawktrace_frontend
     ports:
       - "3001:3001"
     env_file:

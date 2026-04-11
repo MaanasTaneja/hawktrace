@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from auth import router as auth_router
 from pipeline.pipeline_router import router as pipeline_router
 from pipeline.browser_session import router as browser_router
 from pipeline.flows import router as flows_router
@@ -31,6 +32,7 @@ app.add_middleware(
 app.include_router(pipeline_router)
 app.include_router(browser_router)
 app.include_router(flows_router)
+app.include_router(auth_router)
 
 
 @app.get("/")

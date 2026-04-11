@@ -19,3 +19,6 @@ av
 numpy
 
 SQLAlchemy
+psycopg[binary]
+PyJWT
+passlib[bcrypt]

@@ -1,39 +1,69 @@
 import asyncio
 import re
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
 
-from database.mongodb import flows_col
-
-
-class RenameBody(BaseModel):
-    name: str
+from auth import get_current_user
+from database.ht_flows import (
+    db,
+    delete_flow as db_delete_flow,
+    get_flow_by_id,
+    get_flows_for_user,
+    get_tests_by_flow_id,
+    load_flow_events,
+    rename_flow as db_rename_flow,
+)
+from models import (
+    FlowDeleteRead,
+    FlowEventsRead,
+    FlowListItem,
+    FlowRenameRead,
+    FlowTestsRead,
+    RenameBody,
+    UserRead,
+)
 
 router = APIRouter(prefix="/flows")
-FLOWS_DIR = Path("flows")
 
 
-@router.get("/")
-def list_flows():
-    result = []
-    for doc in flows_col().find({}, {"_id": 0, "events": 0}, sort=[("started_at", -1)]):
-        result.append({
-            "flow_id":     doc["flow_id"],
-            "name":        doc.get("name"),
-            "started_at":  doc["started_at"],
-            "frame_count": doc["frame_count"],
-            "event_count": doc.get("event_count", 0),
-            "has_tests":   doc.get("tests") is not None,
-        })
-    return result
+def _flow_video_path(flow_id: str, video_path: str | None) -> Path:
+    if video_path:
+        return Path(video_path)
+    return Path("flows") / flow_id / f"{flow_id}.mp4"
+
+
+@router.get("/", response_model=list[FlowListItem])
+def list_flows(current_user: UserRead = Depends(get_current_user)):
+    with db.get_session() as session:
+        rows = get_flows_for_user(session, current_user.id)
+        return [
+            FlowListItem(
+                flow_id=row.id,
+                name=row.flow_name,
+                started_at=row.started_at.timestamp(),
+                frame_count=row.frame_count,
+                event_count=row.event_count,
+                has_tests=row.status.value == "tests_generated" or row.generated_test is not None,
+            )
+            for row in rows
+        ]
 
 
 @router.api_route("/{flow_id}/video", methods=["GET", "HEAD"])
-def get_video(flow_id: str, request: Request):
-    mp4 = FLOWS_DIR / flow_id / f"{flow_id}.mp4"
+def get_video(
+    flow_id: str,
+    request: Request,
+    current_user: UserRead = Depends(get_current_user),
+):
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow or flow.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        mp4 = _flow_video_path(flow_id, flow.video_path)
+
     if not mp4.exists():
         raise HTTPException(status_code=404, detail="Video not found")
 
@@ -77,46 +107,84 @@ def get_video(flow_id: str, request: Request):
     )
 
 
-@router.get("/{flow_id}/events")
-def get_events(flow_id: str):
-    doc = flows_col().find_one({"flow_id": flow_id}, {"_id": 0, "tests": 0})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    return doc
+@router.get("/{flow_id}/events", response_model=FlowEventsRead)
+def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user)):
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow or flow.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        try:
+            events = load_flow_events(flow.events_path)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        return FlowEventsRead(
+            flow_id=flow.id,
+            started_at=flow.started_at.timestamp(),
+            fps=flow.fps,
+            frame_count=flow.frame_count,
+            event_count=flow.event_count,
+            events=events,
+        )
 
 
-@router.get("/{flow_id}/tests")
-def get_tests(flow_id: str):
-    doc = flows_col().find_one({"flow_id": flow_id}, {"_id": 0, "tests": 1})
-    if not doc or not doc.get("tests"):
-        raise HTTPException(status_code=404, detail="Tests not generated yet")
-    return {"flow_id": flow_id, **doc["tests"]}
+@router.get("/{flow_id}/tests", response_model=FlowTestsRead)
+def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow or flow.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        tests = get_tests_by_flow_id(session, flow_id)
+        if not tests:
+            raise HTTPException(status_code=404, detail="Tests not generated yet")
+        return FlowTestsRead(flow_id=flow_id, bdd=tests.bdd_text, playwright=tests.playwright_text)
 
 
-@router.patch("/{flow_id}/rename")
-def rename_flow(flow_id: str, body: RenameBody):
-    result = flows_col().update_one({"flow_id": flow_id}, {"$set": {"name": body.name.strip()}})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    return {"flow_id": flow_id, "name": body.name.strip()}
+@router.patch("/{flow_id}/rename", response_model=FlowRenameRead)
+def rename_flow(
+    flow_id: str,
+    body: RenameBody,
+    current_user: UserRead = Depends(get_current_user),
+):
+    with db.get_session() as session:
+        existing = get_flow_by_id(session, flow_id)
+        if not existing or existing.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        updated = db_rename_flow(session, flow_id, body.name.strip())
+        if not updated:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        return FlowRenameRead(flow_id=updated.id, name=updated.flow_name or "")
 
 
-@router.delete("/{flow_id}")
-def delete_flow(flow_id: str):
-    import shutil
-    result = flows_col().delete_one({"flow_id": flow_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    flow_dir = FLOWS_DIR / flow_id
+@router.delete("/{flow_id}", response_model=FlowDeleteRead)
+def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)):
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow or flow.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        flow_video_path = _flow_video_path(flow_id, flow.video_path)
+        flow_dir = flow_video_path.parent
+        deleted = db_delete_flow(session, flow_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Flow not found")
+
     if flow_dir.exists():
-        shutil.rmtree(flow_dir)
-    return {"deleted": flow_id}
+        shutil.rmtree(flow_dir, ignore_errors=True)
+    return FlowDeleteRead(deleted=flow_id)
 
 
 @router.post("/{flow_id}/generate_tests")
-async def generate_tests(flow_id: str):
+async def generate_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
     import traceback
     from .test_generator import generate_tests_for_flow
+
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow or flow.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(None, generate_tests_for_flow, flow_id)

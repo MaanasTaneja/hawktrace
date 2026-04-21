@@ -27,55 +27,55 @@ function timeAgo(timestamp: number): string {
 export const RecentTestRuns: React.FC<RecentTestRunsProps> = ({ flows, onViewTests }) => {
   if (flows.length === 0) {
     return (
-      <div className="text-center py-16 text-muted text-sm font-sans opacity-60">
+      <div className="text-center py-16 font-mono text-sm text-mid">
         No flows recorded yet.
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden">
+    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(229,98,42,0.2)' }}>
       <table className="w-full text-left border-collapse">
         <thead>
-          <tr className="bg-transparent">
-            <th className="px-6 py-4 text-[11px] font-sans font-black text-muted uppercase tracking-widest">Flow</th>
-            <th className="px-6 py-4 text-[11px] font-sans font-black text-muted uppercase tracking-widest">Status</th>
-            <th className="px-6 py-4 text-[11px] font-sans font-black text-muted uppercase tracking-widest">Events</th>
-            <th className="px-6 py-4 text-[11px] font-sans font-black text-muted uppercase tracking-widest">Recorded</th>
-            <th className="px-6 py-4"></th>
+          <tr style={{ borderBottom: '1px solid rgba(229,98,42,0.15)' }}>
+            <th className="px-6 py-3.5 text-[10px] font-mono text-mid uppercase tracking-widest">Flow</th>
+            <th className="px-6 py-3.5 text-[10px] font-mono text-mid uppercase tracking-widest">Status</th>
+            <th className="px-6 py-3.5 text-[10px] font-mono text-mid uppercase tracking-widest">Events</th>
+            <th className="px-6 py-3.5 text-[10px] font-mono text-mid uppercase tracking-widest">Recorded</th>
+            <th className="px-6 py-3.5" />
           </tr>
         </thead>
         <tbody>
           {flows.map((flow, idx) => (
             <motion.tr
               key={flow.flow_id}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-              className={`group transition-colors ${idx % 2 === 0 ? 'bg-cream' : 'bg-sand/30'} hover:bg-sand/50`}
+              transition={{ delay: idx * 0.04 }}
+              className="group transition-colors cursor-pointer"
+              style={{
+                borderBottom: idx < flows.length - 1 ? '1px solid rgba(229,98,42,0.1)' : 'none',
+                background: idx % 2 === 0 ? 'transparent' : 'rgba(229,98,42,0.02)',
+              }}
+              onClick={() => onViewTests(flow.flow_id)}
             >
               <td className="px-6 py-4">
                 <div>
-                  <p className="text-sm font-sans font-bold text-ink">
-                    {flow.name || <span className="font-mono text-muted">{flow.flow_id.slice(0, 10)}</span>}
+                  <p className="text-sm font-sans font-medium text-ink">
+                    {flow.name || <span className="font-mono text-mid">{flow.flow_id.slice(0, 10)}</span>}
                   </p>
                   {flow.name && (
-                    <p className="text-[10px] font-mono text-muted/60 mt-0.5">{flow.flow_id.slice(0, 10)}</p>
+                    <p className="text-[10px] font-mono text-mid mt-0.5">{flow.flow_id.slice(0, 10)}</p>
                   )}
                 </div>
               </td>
               <td className="px-6 py-4">
                 <StatusBadge hasTests={flow.has_tests} />
               </td>
-              <td className="px-6 py-4 text-sm font-mono font-bold text-ink/70">{flow.event_count}</td>
-              <td className="px-6 py-4 text-sm font-mono font-bold text-ink/70">{timeAgo(flow.started_at)}</td>
+              <td className="px-6 py-4 text-sm font-mono text-mid">{flow.event_count}</td>
+              <td className="px-6 py-4 text-sm font-mono text-mid">{timeAgo(flow.started_at)}</td>
               <td className="px-6 py-4 text-right">
-                <button
-                  onClick={() => onViewTests(flow.flow_id)}
-                  className="text-muted group-hover:text-burnt transition-colors"
-                >
-                  <ChevronRight size={18} />
-                </button>
+                <ChevronRight size={16} className="text-mid group-hover:text-burnt transition-colors ml-auto" />
               </td>
             </motion.tr>
           ))}
@@ -86,10 +86,13 @@ export const RecentTestRuns: React.FC<RecentTestRunsProps> = ({ flows, onViewTes
 };
 
 const StatusBadge: React.FC<{ hasTests: boolean }> = ({ hasTests }) => (
-  <span className={`
-    px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-widest
-    ${hasTests ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}
-  `}>
+  <span
+    className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+    style={hasTests
+      ? { background: 'rgba(22,163,74,0.08)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)' }
+      : { background: 'rgba(229,98,42,0.08)', color: '#E5622A', border: '1px solid rgba(229,98,42,0.25)' }
+    }
+  >
     {hasTests ? 'READY' : 'PENDING'}
   </span>
 );

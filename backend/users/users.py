@@ -75,7 +75,13 @@ def update_user(user : UserUpdate):
 
 
 
-#no need to impelmentdelete uyser, update user or anythign like that yet. just login shoudl work and registering should work,
+@user_router.delete("/me")
+def delete_account(current_user: UserRead = Depends(get_current_user)):
+    with db.get_session() as session:
+        success = delete_user(session, current_user.id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Could not delete account.")
+    return {"detail": "Account deleted."}
 
 
 

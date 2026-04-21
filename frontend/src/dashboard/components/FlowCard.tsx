@@ -28,49 +28,51 @@ export const FlowCard: React.FC<FlowCardProps> = ({
 
   return (
     <motion.div
-      whileHover={{ y: -4 }}
-      className="bg-white border border-sand rounded-[2rem] p-8 flex flex-col justify-between group transition-all duration-300 shadow-sm"
+      whileHover={{ y: -3 }}
+      onClick={() => onViewTests(flowId)}
+      className="flex flex-col justify-between p-7 rounded-2xl transition-all duration-300 cursor-pointer"
+      style={{ border: '1px solid rgba(229,98,42,0.25)', background: '#F5F4F1' }}
     >
-      <div className="space-y-6">
+      <div className="space-y-5">
         <div className="flex justify-between items-start">
-          <h4 className="text-2xl font-serif font-semibold text-ink leading-tight group-hover:text-burnt transition-colors">
+          <h4 className="text-xl font-serif font-semibold text-ink leading-tight">
             {displayName}
           </h4>
           <StatusBadge hasTests={hasTests} />
         </div>
 
-        <p className="text-xs font-mono text-muted">
+        <p className="text-[11px] font-mono text-mid">
           {flowId}
         </p>
 
-        <div className="flex gap-10">
-          <div className="space-y-1">
-            <p className="text-[10px] font-sans font-bold text-muted uppercase tracking-widest opacity-60">Events</p>
-            <p className="text-xl font-mono font-bold text-ink">{eventCount}</p>
+        <div className="flex gap-8">
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-mono text-mid uppercase tracking-widest">Events</p>
+            <p className="text-lg font-mono font-bold text-ink">{eventCount}</p>
           </div>
-          <div className="space-y-1">
-            <p className="text-[10px] font-sans font-bold text-muted uppercase tracking-widest opacity-60">Frames</p>
-            <p className="text-xl font-mono font-bold text-ink">{frameCount}</p>
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-mono text-mid uppercase tracking-widest">Frames</p>
+            <p className="text-lg font-mono font-bold text-ink">{frameCount}</p>
           </div>
         </div>
       </div>
 
-      <div className="pt-8 border-t border-sand/50 flex items-center justify-between">
-        <div className="flex gap-6">
+      <div className="pt-6 mt-6 flex items-center justify-between" style={{ borderTop: '1px solid rgba(229,98,42,0.15)' }}>
+        <div className="flex gap-5">
           <button
-            onClick={onRecordFlow}
-            className="text-[11px] font-sans font-black text-burnt uppercase tracking-widest hover:opacity-80 transition-opacity"
+            onClick={e => { e.stopPropagation(); onRecordFlow(); }}
+            className="text-[11px] font-mono text-mid uppercase tracking-widest hover:text-ink transition-colors"
           >
-            Record New Flow
+            New Recording
           </button>
           <button
-            onClick={() => onViewTests(flowId)}
-            className="text-[11px] font-sans font-black text-muted uppercase tracking-widest hover:text-ink transition-colors"
+            onClick={e => { e.stopPropagation(); onViewTests(flowId); }}
+            className="text-[11px] font-mono text-burnt uppercase tracking-widest hover:opacity-70 transition-opacity"
           >
-            {hasTests ? 'View Tests' : 'Generate Tests'}
+            View Test Results
           </button>
         </div>
-        <p className="text-[11px] font-mono font-bold text-muted uppercase tracking-tight opacity-60">
+        <p className="text-[11px] font-mono text-mid">
           {timeAgo(startedAt)}
         </p>
       </div>
@@ -79,10 +81,13 @@ export const FlowCard: React.FC<FlowCardProps> = ({
 };
 
 const StatusBadge: React.FC<{ hasTests: boolean }> = ({ hasTests }) => (
-  <span className={`
-    px-2.5 py-0.5 rounded text-[10px] font-mono font-bold tracking-widest
-    ${hasTests ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}
-  `}>
+  <span
+    className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+    style={hasTests
+      ? { background: 'rgba(22,163,74,0.08)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)' }
+      : { background: 'rgba(229,98,42,0.08)', color: '#E5622A', border: '1px solid rgba(229,98,42,0.25)' }
+    }
+  >
     {hasTests ? 'READY' : 'PENDING'}
   </span>
 );

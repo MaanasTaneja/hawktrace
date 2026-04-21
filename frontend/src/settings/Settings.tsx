@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ChevronLeft, User, Server, AlertTriangle, Check, LayoutDashboard, Video, PlayCircle } from 'lucide-react';
 import logo from '../assets/HawkTrace-Logo.png';
 import type { UserProfile } from '../onboarding/Onboarding';
+import { BACKEND, authFetch } from '../api';
 
 interface SettingsProps {
   userProfile: UserProfile;
@@ -250,8 +251,19 @@ const WorkspaceSection: React.FC = () => {
 
 /* ── Danger Zone ── */
 const DangerSection: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
-  const handleClearProfile = () => {
-    onSignOut();
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleClearProfile = async () => {
+    if (!window.confirm('Are you sure? This will permanently delete your account.')) return;
+    setDeleting(true);
+    try {
+      await authFetch(`${BACKEND}/users/me`, { method: 'DELETE' });
+    } catch (_) {
+      // proceed to sign out regardless
+    } finally {
+      setDeleting(false);
+      onSignOut();
+    }
   };
 
   return (
@@ -264,14 +276,15 @@ const DangerSection: React.FC<{ onSignOut: () => void }> = ({ onSignOut }) => {
       <div className="space-y-4">
         <div className="border border-red-100 rounded-2xl p-6 flex items-center justify-between gap-6">
           <div>
-            <p className="text-sm font-sans font-bold text-ink">Reset profile</p>
-            <p className="text-[13px] font-sans text-muted mt-0.5">Clears your saved name, role, and company. You'll be taken back to the onboarding screen.</p>
+            <p className="text-sm font-sans font-bold text-ink">Delete Account</p>
+            <p className="text-[13px] font-sans text-muted mt-0.5">Permanently deletes your account and all associated data. This cannot be undone.</p>
           </div>
           <button
             onClick={handleClearProfile}
-            className="shrink-0 px-5 py-2 rounded-full border border-red-200 text-red-600 text-[13px] font-sans font-semibold hover:bg-red-50 transition-colors"
+            disabled={deleting}
+            className="shrink-0 px-5 py-2 rounded-full border border-red-200 text-red-600 text-[13px] font-sans font-semibold hover:bg-red-50 transition-colors disabled:opacity-50"
           >
-            Reset
+            {deleting ? 'Deleting…' : 'Delete'}
           </button>
         </div>
       </div>

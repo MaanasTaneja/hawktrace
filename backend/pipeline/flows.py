@@ -17,11 +17,12 @@ from database.ht_flows import (
     rename_flow as db_rename_flow,
 )
 from models import (
+    AnalyzeBody,
+    FlowAnalysisRead,
     FlowDeleteRead,
     FlowEventsRead,
     FlowListItem,
     FlowRenameRead,
-    FlowTestsRead,
     RenameBody,
     UserRead,
 )
@@ -133,17 +134,37 @@ def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user))
             events=events,
         )
 
-#reutnr the flow test / or agent recipe.
-@router.get("/{flow_id}/tests", response_model=FlowTestsRead)
+#return the visual analysis observations for this flow
+@router.get("/{flow_id}/tests", response_model=FlowAnalysisRead)
 def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
+    import json as _json
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
         tests = get_tests_by_flow_id(session, flow_id)
         if not tests:
-            raise HTTPException(status_code=404, detail="Tests not generated yet")
-        return FlowTestsRead(flow_id=flow_id, bdd=tests.bdd_text, playwright=tests.playwright_text)
+            raise HTTPException(status_code=404, detail="Analysis not generated yet")
+        try:
+            stored = _json.loads(tests.bdd_text)
+            # new format: {goal, success_criteria, observations}
+            if isinstance(stored, dict):
+                observations = stored.get("observations", [])
+                goal = stored.get("goal")
+                success_criteria = stored.get("success_criteria")
+            else:
+                # old format: bare array
+                observations = stored
+                goal = None
+                success_criteria = None
+        except (TypeError, ValueError):
+            observations, goal, success_criteria = [], None, None
+        return FlowAnalysisRead(
+            flow_id=flow_id,
+            goal=goal,
+            success_criteria=success_criteria,
+            observations=observations,
+        )
 
 
 @router.patch("/{flow_id}/rename", response_model=FlowRenameRead)
@@ -179,11 +200,15 @@ def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)
     return FlowDeleteRead(deleted=flow_id)
 
 
-#call t geneate the agent recipe for this flow, maiing sure we are currently logged in and have auser. token active
+#analyze flow video with Gemini — returns visual observations per event
 @router.post("/{flow_id}/generate_tests")
-async def generate_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
+async def generate_tests(
+    flow_id: str,
+    body: AnalyzeBody = AnalyzeBody(),
+    current_user: UserRead = Depends(get_current_user),
+):
     import traceback
-    from .test_generator import generate_tests_for_flow
+    from .test_generator import analyze_flow_video
 
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
@@ -192,11 +217,13 @@ async def generate_tests(flow_id: str, current_user: UserRead = Depends(get_curr
 
     loop = asyncio.get_event_loop()
     try:
-        result = await loop.run_in_executor(None, generate_tests_for_flow, flow_id)
+        result = await loop.run_in_executor(
+            None, analyze_flow_video, flow_id, body.goal, body.success_criteria
+        )
         return result
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         tb = traceback.format_exc()
-        print(f"[generate_tests] ERROR for flow {flow_id}:\n{tb}")
+        print(f"[analyze_flow] ERROR for flow {flow_id}:\n{tb}")
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

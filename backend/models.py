@@ -54,6 +54,18 @@ class FlowTestsRead(BaseModel):
     playwright: str
 
 
+class AnalyzeBody(BaseModel):
+    goal: str | None = None
+    success_criteria: str | None = None
+
+
+class FlowAnalysisRead(BaseModel):
+    flow_id: str
+    goal: str | None = None
+    success_criteria: str | None = None
+    observations: list[dict]
+
+
 class FlowRenameRead(BaseModel):
     flow_id: str
     name: str

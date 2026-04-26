@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Copy, Download, Check, Loader2, Play } from 'lucide-react';
+import { ArrowLeft, Loader2, Play, MousePointer, Type, Navigation, ChevronsDown, Keyboard } from 'lucide-react';
 import logo from '../assets/HawkTrace-Logo.png';
 
 import { BACKEND, authFetch } from '../api';
@@ -36,12 +36,13 @@ interface FlowEvent {
   key?: string;
 }
 
-interface Tests {
-  bdd: string;
-  playwright: string;
+interface Observation {
+  event_id: number;
+  action_taken: string;
+  visual_outcome: string;
 }
 
-type GenerationStage = 'idle' | 'uploading' | 'analyzing' | 'generating' | 'done' | 'error';
+type GenerationStage = 'idle' | 'uploading' | 'analyzing' | 'done' | 'error';
 
 interface TestSuitesProps {
   onBack: () => void;
@@ -54,15 +55,17 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
   const [flows, setFlows] = useState<FlowMeta[]>([]);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(initialFlowId ?? null);
   const [flowDetail, setFlowDetail] = useState<FlowDetail | null>(null);
-  const [tests, setTests] = useState<Tests | null>(null);
-  const [activeTab, setActiveTab] = useState<'bdd' | 'playwright'>('bdd');
+  const [observations, setObservations] = useState<Observation[] | null>(null);
+  const [goal, setGoal] = useState('');
+  const [successCriteria, setSuccessCriteria] = useState('');
+  const [storedGoal, setStoredGoal] = useState<string | null>(null);
+  const [storedSuccessCriteria, setStoredSuccessCriteria] = useState<string | null>(null);
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle');
-  const [copied, setCopied] = useState(false);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
   const [videoBlobUrl, setVideoBlobUrl] = useState<string | null>(null);
-  const stageTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const stageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFlows = useCallback(async () => {
@@ -73,13 +76,8 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
     } catch { }
   }, []);
 
-  useEffect(() => {
-    loadFlows();
-  }, [loadFlows]);
-
-  useEffect(() => {
-    if (initialFlowId) setSelectedFlowId(initialFlowId);
-  }, [initialFlowId]);
+  useEffect(() => { loadFlows(); }, [loadFlows]);
+  useEffect(() => { if (initialFlowId) setSelectedFlowId(initialFlowId); }, [initialFlowId]);
 
   const pollVideoReady = useCallback((flowId: string) => {
     if (videoPollRef.current) clearTimeout(videoPollRef.current);
@@ -116,7 +114,11 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
 
   const loadFlow = useCallback(async (flowId: string) => {
     setFlowDetail(null);
-    setTests(null);
+    setObservations(null);
+    setGoal('');
+    setSuccessCriteria('');
+    setStoredGoal(null);
+    setStoredSuccessCriteria(null);
     setGenerationStage('idle');
     setCurrentVideoTime(0);
     setVideoDuration(0);
@@ -129,12 +131,15 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
       const detail: FlowDetail = await eventsRes.json();
       setFlowDetail(detail);
 
-      // Always try to fetch tests — don't rely on stale flows list
       const testsRes = await authFetch(`${BACKEND}/flows/${flowId}/tests`);
       if (testsRes.ok) {
-        const testsData = await testsRes.json();
-        setTests({ bdd: testsData.bdd, playwright: testsData.playwright });
-        setGenerationStage('done');
+        const data = await testsRes.json();
+        if (data.observations?.length > 0) {
+          setObservations(data.observations);
+          setStoredGoal(data.goal ?? null);
+          setStoredSuccessCriteria(data.success_criteria ?? null);
+          setGenerationStage('done');
+        }
       }
     } catch { }
   }, [pollVideoReady]);
@@ -143,55 +148,35 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
     if (selectedFlowId) loadFlow(selectedFlowId);
   }, [selectedFlowId, loadFlow]);
 
-  const handleGenerateTests = async () => {
+  const handleAnalyze = async () => {
     if (!selectedFlowId) return;
-    stageTimersRef.current.forEach(clearTimeout);
+    if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
 
     setGenerationStage('uploading');
-    stageTimersRef.current = [
-      setTimeout(() => setGenerationStage('analyzing'), 18000),
-      setTimeout(() => setGenerationStage('generating'), 38000),
-    ];
+    stageTimerRef.current = setTimeout(() => setGenerationStage('analyzing'), 18000);
 
     try {
-      const res = await authFetch(`${BACKEND}/flows/${selectedFlowId}/generate_tests`, { method: 'POST' });
+      const res = await authFetch(`${BACKEND}/flows/${selectedFlowId}/generate_tests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal: goal || null, success_criteria: successCriteria || null }),
+      });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
-      stageTimersRef.current.forEach(clearTimeout);
-      setTests({ bdd: data.bdd, playwright: data.playwright });
+      if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
+      setObservations(data.observations);
+      setStoredGoal(data.goal ?? null);
+      setStoredSuccessCriteria(data.success_criteria ?? null);
       setGenerationStage('done');
-      setActiveTab('bdd');
       loadFlows();
     } catch {
-      stageTimersRef.current.forEach(clearTimeout);
+      if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
       setGenerationStage('error');
     }
   };
 
-  useEffect(() => () => { stageTimersRef.current.forEach(clearTimeout); }, []);
+  useEffect(() => () => { if (stageTimerRef.current) clearTimeout(stageTimerRef.current); }, []);
 
-  const handleCopy = () => {
-    const content = activeTab === 'bdd' ? tests?.bdd : tests?.playwright;
-    if (!content) return;
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownload = () => {
-    const content = activeTab === 'bdd' ? tests?.bdd : tests?.playwright;
-    const filename = activeTab === 'bdd' ? 'feature.txt' : 'test.spec.ts';
-    if (!content) return;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Group flows by date
   const groupedFlows = flows.reduce<Record<string, FlowMeta[]>>((acc, flow) => {
     const date = new Date(flow.started_at * 1000).toLocaleDateString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric',
@@ -204,17 +189,23 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
   const stageLabel: Record<string, string> = {
     uploading: 'Uploading recording to Gemini...',
     analyzing: 'Analyzing your flow...',
-    generating: 'Generating test code...',
   };
 
   const eventColor = (type: string) => {
     if (type === 'click' || type === 'dblclick') return '#E5622A';
-    if (type === 'keydown') return '#2DD4BF';
+    if (type === 'keydown' || type === 'fill') return '#2DD4BF';
     if (type === 'navigate') return '#60A5FA';
     return '#A8A29E';
   };
 
-  const codeContent = activeTab === 'bdd' ? tests?.bdd ?? '' : tests?.playwright ?? '';
+  const eventIcon = (type: string) => {
+    if (type === 'click' || type === 'dblclick') return <MousePointer size={12} />;
+    if (type === 'fill') return <Type size={12} />;
+    if (type === 'navigate') return <Navigation size={12} />;
+    if (type === 'scroll') return <ChevronsDown size={12} />;
+    if (type === 'keydown') return <Keyboard size={12} />;
+    return null;
+  };
 
   return (
     <div className="flex min-h-screen bg-[#FAF9F6] font-sans">
@@ -240,28 +231,26 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
             Recorded Flows
           </p>
           {Object.keys(groupedFlows).length === 0 ? (
-            <p className="text-[13px] text-dim font-sans px-2 py-4 leading-relaxed">
-              No flows recorded yet.
-            </p>
+            <p className="text-[13px] text-dim font-sans px-2 py-4 leading-relaxed">No flows recorded yet.</p>
           ) : (
             Object.entries(groupedFlows).map(([date, dateFlows]) => (
               <div key={date} className="mb-5">
-                <p className="text-[10px] font-sans font-bold text-dim uppercase tracking-wider px-2 mb-1.5">
-                  {date}
-                </p>
+                <p className="text-[10px] font-sans font-bold text-dim uppercase tracking-wider px-2 mb-1.5">{date}</p>
                 <div className="space-y-0.5">
                   {dateFlows.map((flow) => (
                     <button
                       key={flow.flow_id}
                       onClick={() => setSelectedFlowId(flow.flow_id)}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group ${selectedFlowId === flow.flow_id
+                      className={`w-full text-left px-3 py-2.5 rounded-xl transition-all flex items-center justify-between group ${
+                        selectedFlowId === flow.flow_id
                           ? 'bg-[#FAF9F6] border border-sand'
                           : 'hover:bg-[#FAF9F6] border border-transparent hover:border-sand'
-                        }`}
+                      }`}
                     >
                       <div>
-                        <p className={`text-[11px] font-mono font-bold transition-colors ${selectedFlowId === flow.flow_id ? 'text-burnt' : 'text-ink group-hover:text-burnt'
-                          }`}>
+                        <p className={`text-[11px] font-mono font-bold transition-colors ${
+                          selectedFlowId === flow.flow_id ? 'text-burnt' : 'text-ink group-hover:text-burnt'
+                        }`}>
                           {flow.name ?? flow.flow_id}
                         </p>
                         <p className="text-[10px] font-sans text-dim mt-0.5">
@@ -321,7 +310,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
               {!videoBlobUrl ? (
                 <div className="w-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-3 py-16">
                   <Loader2 size={28} className="text-burnt animate-spin" />
-                  <p className="text-[13px] font-sans text-[#888]">We're loading your recording, just a sec…</p>
+                  <p className="text-[13px] font-sans text-[#888]">Loading recording…</p>
                 </div>
               ) : (
                 <video
@@ -336,15 +325,12 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
 
               {flowDetail.events.length > 0 && (
                 <div className="p-5 border-t border-sand">
-                  {/* Legend */}
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-sans font-black text-mid uppercase tracking-widest">
-                      Event Timeline
-                    </p>
+                    <p className="text-[10px] font-sans font-black text-mid uppercase tracking-widest">Event Timeline</p>
                     <div className="flex items-center gap-4">
                       {[
                         { label: 'click', color: '#E5622A' },
-                        { label: 'input', color: '#2DD4BF' },
+                        { label: 'fill', color: '#2DD4BF' },
                         { label: 'navigate', color: '#60A5FA' },
                         { label: 'scroll', color: '#A8A29E' },
                       ].map(({ label, color }) => (
@@ -355,15 +341,11 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                       ))}
                     </div>
                   </div>
-
-                  {/* Scrubber */}
                   <div className="relative h-9 bg-[#FAF9F6] rounded-lg border border-sand overflow-hidden">
-                    {/* Playback progress */}
                     <div
                       className="absolute left-0 top-0 h-full bg-burnt/8 transition-all duration-100 pointer-events-none"
                       style={{ width: videoDuration > 0 ? `${(currentVideoTime / videoDuration) * 100}%` : '0%' }}
                     />
-                    {/* Event dots */}
                     {videoDuration > 0 && flowDetail.events.map((ev, i) => {
                       const pct = (ev.video_t / videoDuration) * 100;
                       const isActive = Math.abs(ev.video_t - currentVideoTime) < 0.5;
@@ -372,9 +354,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                           key={i}
                           className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-150 hover:scale-125"
                           style={{ left: `${pct}%` }}
-                          onClick={() => {
-                            if (videoRef.current) videoRef.current.currentTime = ev.video_t;
-                          }}
+                          onClick={() => { if (videoRef.current) videoRef.current.currentTime = ev.video_t; }}
                           title={`${ev.type}${ev.url ? ': ' + ev.url : ev.key ? ': ' + ev.key : ''}`}
                         >
                           <div
@@ -394,27 +374,59 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
               )}
             </div>
 
-            {/* Tests section */}
+            {/* Analysis section */}
             <div>
               {generationStage === 'idle' && (
-                <div className="bg-white border border-sand rounded-2xl p-14 flex flex-col items-center text-center shadow-sm">
-                  <div className="w-16 h-16 rounded-2xl bg-burnt/10 border border-burnt/20 flex items-center justify-center mb-6">
-                    <Play size={24} className="text-burnt ml-1" />
+                <div className="bg-white border border-sand rounded-2xl p-10 shadow-sm space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-burnt/10 border border-burnt/20 flex items-center justify-center shrink-0">
+                      <Play size={20} className="text-burnt ml-0.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-serif font-bold text-ink">Analyze Flow</h3>
+                      <p className="text-[13px] font-sans text-mid mt-0.5">
+                        Gemini will walk through the recording and describe what visually happened at each action.
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="text-xl font-serif font-bold text-ink mb-3">Generate Tests</h3>
-                  <p className="text-[14px] font-sans text-mid max-w-md mb-8 leading-relaxed">
-                    We'll generate BDD Gherkin scenarios and Playwright tests from your session. This takes about 60 seconds.
-                  </p>
+
+                  <div className="space-y-4 max-w-lg">
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-sans font-bold text-mid uppercase tracking-wider">
+                        Flow Goal <span className="text-dim font-normal normal-case tracking-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={goal}
+                        onChange={e => setGoal(e.target.value)}
+                        placeholder="e.g. Verify newsletter signup works"
+                        className="w-full bg-[#FAF9F6] border border-sand rounded-xl px-4 py-2.5 text-[14px] text-ink placeholder:text-dim/50 focus:outline-none focus:border-burnt focus:ring-1 focus:ring-burnt/20 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-sans font-bold text-mid uppercase tracking-wider">
+                        Success Criteria <span className="text-dim font-normal normal-case tracking-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={successCriteria}
+                        onChange={e => setSuccessCriteria(e.target.value)}
+                        placeholder="e.g. Confirmation message appears after submit"
+                        className="w-full bg-[#FAF9F6] border border-sand rounded-xl px-4 py-2.5 text-[14px] text-ink placeholder:text-dim/50 focus:outline-none focus:border-burnt focus:ring-1 focus:ring-burnt/20 transition-all"
+                      />
+                    </div>
+                  </div>
+
                   <button
-                    onClick={handleGenerateTests}
+                    onClick={handleAnalyze}
                     className="bg-burnt/10 border border-burnt/20 text-burnt font-sans font-bold px-8 py-3 rounded-full hover:bg-burnt/20 transition-all text-[14px]"
                   >
-                    Generate Tests
+                    Analyze with Gemini
                   </button>
                 </div>
               )}
 
-              {(generationStage === 'uploading' || generationStage === 'analyzing' || generationStage === 'generating') && (
+              {(generationStage === 'uploading' || generationStage === 'analyzing') && (
                 <div className="bg-white border border-sand rounded-2xl p-14 flex flex-col items-center text-center shadow-sm">
                   <Loader2 size={36} className="text-burnt animate-spin mb-6" />
                   <AnimatePresence mode="wait">
@@ -428,15 +440,13 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                       {stageLabel[generationStage]}
                     </motion.p>
                   </AnimatePresence>
-                  <p className="text-[13px] font-sans text-dim">This usually takes about 60 seconds</p>
+                  <p className="text-[13px] font-sans text-dim">This usually takes about 30–60 seconds</p>
                 </div>
               )}
 
               {generationStage === 'error' && (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-10 flex flex-col items-center text-center">
-                  <p className="text-[15px] font-sans font-medium text-red-700 mb-3">
-                    Something went wrong generating tests.
-                  </p>
+                  <p className="text-[15px] font-sans font-medium text-red-700 mb-3">Something went wrong.</p>
                   <button
                     onClick={() => setGenerationStage('idle')}
                     className="text-[12px] font-sans font-bold text-red-600 underline underline-offset-4"
@@ -446,80 +456,93 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                 </div>
               )}
 
-              {generationStage === 'done' && tests && (
+              {generationStage === 'done' && observations && (
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4 }}
-                  className="bg-white border border-sand rounded-2xl overflow-hidden shadow-sm"
+                  className="space-y-3"
                 >
-                  {/* Tab bar */}
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-sand">
-                    <div className="flex gap-1 bg-[#FAF9F6] p-1 rounded-full border border-sand">
-                      <button
-                        onClick={() => setActiveTab('bdd')}
-                        className={`px-4 py-1.5 rounded-full text-[12px] font-sans font-bold transition-all ${activeTab === 'bdd'
-                            ? 'bg-white text-burnt shadow-sm border border-sand'
-                            : 'text-mid hover:text-ink'
-                          }`}
-                      >
-                        BDD Gherkin
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('playwright')}
-                        className={`px-4 py-1.5 rounded-full text-[12px] font-sans font-bold transition-all ${activeTab === 'playwright'
-                            ? 'bg-white text-burnt shadow-sm border border-sand'
-                            : 'text-mid hover:text-ink'
-                          }`}
-                      >
-                        Playwright
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleCopy}
-                        className="flex items-center gap-1.5 text-[11px] font-sans font-bold text-mid hover:text-ink transition-colors px-3 py-1.5 rounded-lg hover:bg-[#FAF9F6]"
-                      >
-                        {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
-                      <button
-                        onClick={handleDownload}
-                        className="flex items-center gap-1.5 text-[11px] font-sans font-bold text-burnt px-3 py-1.5 rounded-lg hover:bg-burnt/5 border border-burnt/20 transition-all"
-                      >
-                        <Download size={13} />
-                        {activeTab === 'bdd' ? 'feature.txt' : 'test.spec.ts'}
-                      </button>
-                    </div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-serif font-bold text-ink">Visual Analysis</h3>
+                    <span className="text-[11px] font-mono text-dim">{observations.length} observations</span>
                   </div>
 
-                  {/* Code block */}
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={activeTab}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="bg-[#1C1C1E] overflow-auto max-h-[600px]"
-                    >
-                      <pre className="p-6 text-[13px] font-mono leading-relaxed">
-                        {codeContent.split('\n').map((line, i) => (
-                          <div key={i} className="flex min-h-[1.5em]">
-                            <span className="w-10 shrink-0 text-[#4A4A4F] select-none text-right pr-5 tabular-nums">
-                              {i + 1}
-                            </span>
-                            <span className="text-[#E2E2E2] whitespace-pre">{line || '\u00A0'}</span>
+                  {(storedGoal || storedSuccessCriteria) && (
+                    <div className="bg-[#FAF9F6] border border-sand rounded-2xl p-5 mb-2 space-y-2">
+                      {storedGoal && (
+                        <div>
+                          <p className="text-[10px] font-sans font-bold text-mid uppercase tracking-wider mb-0.5">Goal</p>
+                          <p className="text-[13px] font-sans text-ink">{storedGoal}</p>
+                        </div>
+                      )}
+                      {storedSuccessCriteria && (
+                        <div>
+                          <p className="text-[10px] font-sans font-bold text-mid uppercase tracking-wider mb-0.5">Success Criteria</p>
+                          <p className="text-[13px] font-sans text-ink">{storedSuccessCriteria}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {observations.map((obs, i) => {
+                    const ev = flowDetail.events[obs.event_id];
+                    return (
+                      <motion.div
+                        key={obs.event_id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25, delay: i * 0.04 }}
+                        className="bg-white border border-sand rounded-2xl p-5 flex gap-4 shadow-sm"
+                      >
+                        {/* Left: event type indicator */}
+                        <div className="shrink-0 flex flex-col items-center gap-1.5 pt-0.5">
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center"
+                            style={{
+                              background: ev ? eventColor(ev.type) + '18' : '#F0EDE8',
+                              color: ev ? eventColor(ev.type) : '#A8A29E',
+                              border: `1px solid ${ev ? eventColor(ev.type) + '40' : '#E8E4DF'}`,
+                            }}
+                          >
+                            {ev ? eventIcon(ev.type) : null}
                           </div>
-                        ))}
-                      </pre>
-                    </motion.div>
-                  </AnimatePresence>
+                          {i < observations.length - 1 && (
+                            <div className="w-px flex-1 min-h-[16px] bg-[#F0EDE8]" />
+                          )}
+                        </div>
+
+                        {/* Right: content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="text-[10px] font-mono font-bold text-dim">#{obs.event_id}</span>
+                            {ev && (
+                              <span
+                                className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                                style={{
+                                  background: eventColor(ev.type) + '14',
+                                  color: eventColor(ev.type),
+                                }}
+                              >
+                                {ev.type}
+                              </span>
+                            )}
+                            {ev && (
+                              <span className="text-[10px] font-mono text-dim">
+                                t={ev.video_t.toFixed(2)}s
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[13px] font-sans font-semibold text-ink mb-1">{obs.action_taken}</p>
+                          <p className="text-[13px] font-sans text-mid leading-relaxed">{obs.visual_outcome}</p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </motion.div>
               )}
             </div>
 
-            {/* Bottom padding */}
             <div className="h-8" />
           </motion.div>
         )}

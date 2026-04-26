@@ -1,64 +1,29 @@
-TEST_GENERATION_PROMPT = """You are an expert QA engineer. You have been given a screen recording of a user interacting with a web application, along with a precise event trace of every action taken (timestamps are seconds from the start of the recording).
+VIDEO_ANALYSIS_PROMPT = """You are a QA engineer analyzing a screen recording of a user flow.
+{goal_context}
+You have been given:
+1. A video recording of user interactions with a web application
+2. A list of events with video timestamps (in seconds from start)
 
-Analyze the recording carefully — identify the pages visited, UI elements interacted with, forms filled, navigation patterns, and the overall workflow being demonstrated.
+Your task: for each event, look at the corresponding moment in the video and describe what the user did and what visually changed on screen after that action.
 
-Generate two outputs:
+Return a JSON array — one object per event — in this exact format:
+[
+  {{
+    "event_id": 0,
+    "action_taken": "short description of the user action",
+    "visual_outcome": "what visually changed on screen after this action"
+  }},
+  ...
+]
 
-IMPORTANT RULES FOR ASSERTIONS:
-- Never assert specific text content that comes from a database or CMS
-  (article titles, product names, prices, user generated content)
-- Always assert structural elements that should always exist
-  (section headings, navigation, at least one item in a list, buttons)
-- For lists and feeds assert count > 0 not specific items
-- For content websites use: expect(locator.first()).toBeVisible()
-  not expect(page.getByText('specific article title')).toBeVisible()
-- If the recorded content looks dynamic (news, products, posts)
-  generate count-based assertions not content-based ones
+Guidelines:
+- Use the event type and element info (selector, placeholder, text) to describe the action_taken precisely
+- For visual_outcome, describe what actually appeared/changed/disappeared on screen — be specific and concrete
+- For scroll events describe what became visible after scrolling
+- For fill events include the value that was typed
+- For navigation events describe the page that loaded
+- Return ONLY the JSON array, no markdown, no extra text
 
-
-SCROLL HANDLING RULES:
-- Never use scrollBy with hardcoded pixel values to reach a specific element
-- Instead use: await page.locator('target element').scrollIntoViewIfNeeded()
-- Only use scrollBy for testing scroll behavior itself like infinite scroll or lazy loading
-- Replace waitForTimeout with waitForLoadState or expect().toBeVisible() with timeout
-- Hardcoded timeouts over 500ms are always a sign something better exists
-
----
-
-## PART 1 — BDD Test Scenarios (Gherkin)
-
-Write a complete Feature block with one or more Scenario blocks covering the workflow shown.
-- Derive the feature name from the URL and visual context
-- Use concrete Given/When/Then steps with specific details visible in the recording (button labels, field names, page titles, URLs)
-- Cover the full happy path demonstrated
-- Add a Scenario Outline or additional Scenario for any obvious edge case worth testing
-
----
-
-## PART 2 — Playwright TypeScript Spec
-
-Implement the BDD scenarios as a Playwright test file (TypeScript).
-- `import {{ test, expect }} from '@playwright/test'`
-- Navigate to the exact starting URL shown
-- Use semantic selectors in priority order: `getByRole`, `getByLabel`, `getByText`, `getByPlaceholder` — fall back to CSS/data-testid only when necessary
-- After every significant action (navigation, form submit, modal open) add an assertion: `expect(page).toHaveURL(...)`, `expect(locator).toBeVisible()`, `expect(locator).toHaveText(...)`
-- Replicate all actions from the event trace: navigations, clicks, scrolls (`page.evaluate(() => window.scrollBy(...))`), key presses
-- Use `await page.waitForLoadState('networkidle')` after navigations where appropriate
-
----
-
-Event Trace:
-```json
+Events:
 {events_json}
-```
-
-Respond in exactly this format — no other text outside the code blocks:
-
-```gherkin
-<BDD scenarios here>
-```
-
-```typescript
-<Playwright spec here>
-```
 """

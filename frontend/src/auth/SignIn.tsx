@@ -53,12 +53,12 @@ export const SignIn: React.FC<SignInProps> = ({ onSignUpClick, onBack, onSuccess
         <img src={logo} alt="HawkTrace" className="h-20 w-20 object-contain mx-auto mb-3" />
         <h1 className="font-serif font-bold text-3xl tracking-tight text-ink mb-2">HawkTrace</h1>
         <h2 className="font-serif text-2xl text-ink mb-3">Welcome back.</h2>
-        <p className="font-sans text-mid text-[15px]">Your test suites are waiting.</p>
+        <p className="font-sans text-white text-[15px]">Your test suites are waiting.</p>
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
         <div className="space-y-1.5">
-          <label className="block text-[11px] font-medium text-mid uppercase tracking-wider ml-1">
+          <label className="block text-[11px] font-medium text-white uppercase tracking-wider ml-1">
             Username
           </label>
           <input
@@ -66,13 +66,13 @@ export const SignIn: React.FC<SignInProps> = ({ onSignUpClick, onBack, onSuccess
             placeholder="your username"
             value={username}
             onChange={e => setUsername(e.target.value)}
-            className="w-full bg-cream border border-sand rounded-xl px-4 py-3 text-[15px] text-ink placeholder:text-dim transition-all focus:outline-none focus:border-burnt focus:ring-1 focus:ring-burnt/20"
+            className="w-full bg-cream border border-sand rounded-xl px-4 py-3 text-[15px] text-black placeholder:text-dim transition-all focus:outline-none focus:border-burnt focus:ring-1 focus:ring-burnt/20"
             required
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-[11px] font-medium text-mid uppercase tracking-wider ml-1">
+          <label className="block text-[11px] font-medium text-white uppercase tracking-wider ml-1">
             Password
           </label>
           <input
@@ -80,7 +80,7 @@ export const SignIn: React.FC<SignInProps> = ({ onSignUpClick, onBack, onSuccess
             placeholder="••••••••"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="w-full bg-cream border border-sand rounded-xl px-4 py-3 text-[15px] text-ink placeholder:text-dim transition-all focus:outline-none focus:border-burnt focus:ring-1 focus:ring-burnt/20"
+            className="w-full bg-cream border border-sand rounded-xl px-4 py-3 text-[15px] text-black placeholder:text-dim transition-all focus:outline-none focus:border-burnt focus:ring-1 focus:ring-burnt/20"
             required
           />
         </div>
@@ -98,11 +98,11 @@ export const SignIn: React.FC<SignInProps> = ({ onSignUpClick, onBack, onSuccess
         </button>
       </form>
 
-      <div className="mt-8 text-center text-[14px] text-mid">
+      <div className="mt-8 text-center text-[14px] text-white/80">
         Don't have an account?{' '}
         <button
           onClick={onSignUpClick}
-          className="text-burnt font-medium underline underline-offset-4 decoration-burnt/30 hover:decoration-burnt transition-all"
+          className="text-white font-semibold underline underline-offset-4 decoration-white/50 hover:decoration-white transition-all"
         >
           Start for free.
         </button>

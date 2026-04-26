@@ -44,5 +44,16 @@ services:
       - hawktrace_backend
     restart: unless-stopped
 
+  hawktrace_cache:
+    image: redis:latest
+    container_name: hawktrace_cache
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
 volumes:
   pgdata:
+  redis_data:

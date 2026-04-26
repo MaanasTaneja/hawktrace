@@ -135,14 +135,18 @@ def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user))
         )
 
 #return the visual analysis observations for this flow
+#returns the flow anlaysis read model
 @router.get("/{flow_id}/tests", response_model=FlowAnalysisRead)
 def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
     import json as _json
+
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
         tests = get_tests_by_flow_id(session, flow_id)
+        #fetch the tests?
+
         if not tests:
             raise HTTPException(status_code=404, detail="Analysis not generated yet")
         try:
@@ -201,6 +205,8 @@ def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)
 
 
 #analyze flow video with Gemini — returns visual observations per event
+#this is th eone that reecieves the analyze button call.
+
 @router.post("/{flow_id}/generate_tests")
 async def generate_tests(
     flow_id: str,
@@ -208,6 +214,12 @@ async def generate_tests(
     current_user: UserRead = Depends(get_current_user),
 ):
     import traceback
+    #here we call the analyze flow video witht he long running task, and use asyncio to call it.
+    #so basically need to make the test generator function into a celery task, and we launch
+    #celery task here
+    #provide another route to poll reuslts. but thats it.
+    #insde the cleery task we will also update redis to store the progress of the agent recipie creation.
+    
     from .test_generator import analyze_flow_video
 
     with db.get_session() as session:

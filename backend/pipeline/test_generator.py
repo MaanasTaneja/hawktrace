@@ -1,71 +1,14 @@
 import json
-import mimetypes
-import os
 import re
-import time
 from pathlib import Path
-
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-
 from prompts import VIDEO_ANALYSIS_PROMPT
+from clients.gemini import upload_clip, _call_gemini
 from database.ht_flows import db, get_flow_by_id, load_flow_events, upsert_generated_tests
 
 load_dotenv()
 
 FLOWS_DIR = Path("flows")
-
-_client = None
-
-
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    return _client
-
-
-def upload_clip(clip_path: str) -> str:
-    """Upload a video clip to the Gemini Files API and wait until ACTIVE."""
-    client = _get_client()
-    mime_type, _ = mimetypes.guess_type(clip_path)
-    if not mime_type or not mime_type.startswith("video/"):
-        mime_type = "video/mp4"
-
-    with open(clip_path, "rb") as f:
-        uploaded = client.files.upload(file=f, config={"mime_type": mime_type})
-
-    while True:
-        info = client.files.get(name=uploaded.name)
-        if info.state.name == "ACTIVE":
-            return uploaded.uri
-        if info.state.name == "FAILED":
-            raise RuntimeError(f"Gemini file upload failed: {info.error}")
-        time.sleep(2)
-
-
-def _call_gemini(file_uri: str, prompt: str, fps: int = 20) -> str:
-    client = _get_client()
-    parts = [
-        types.Part(
-            file_data=types.FileData(file_uri=file_uri),
-            video_metadata=types.VideoMetadata(fps=fps),
-        ),
-        types.Part(text=prompt),
-    ]
-    response = client.models.generate_content(
-        model="gemini-3.1-pro-preview",
-        contents=types.Content(parts=parts),
-        config=types.GenerateContentConfig(
-            max_output_tokens=32768,
-            temperature=0.2,
-            media_resolution="MEDIA_RESOLUTION_HIGH",
-            thinking_config=types.ThinkingConfig(thinking_budget=32768),
-        ),
-    )
-    return response.text
-
 
 SEMANTIC_KEYS = {"Enter", "Tab", "Escape"}
 EDITING_KEYS = {
@@ -155,12 +98,14 @@ def analyze_flow_video(flow_id: str, goal: str | None = None, success_criteria: 
 
     print(f"[analysis] calling Gemini for flow {flow_id}...")
     prompt = VIDEO_ANALYSIS_PROMPT.format(goal_context=goal_context, events_json=events_json)
+    #long running task this one.
     raw = _call_gemini(file_uri, prompt, fps=fps)
 
     observations = _parse_observations(raw)
 
     stored = {"goal": goal, "success_criteria": success_criteria, "observations": observations}
     with db.get_session() as session:
+        #upsert the generated recipe into the db.
         saved = upsert_generated_tests(
             session=session,
             flow_id=flow_id,

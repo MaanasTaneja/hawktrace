@@ -212,8 +212,27 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
   return (
     <div className="flex min-h-screen bg-[#FAF9F6] font-sans">
 
-      {/* ── Sidebar ──────────────────────────────────────────── */}
-      <aside className="w-[280px] bg-white border-r border-[#F0EDE8] flex flex-col fixed h-screen z-20">
+      {/* ── Mobile flow picker ───────────────────────────────── */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 bg-white border-b border-[#F0EDE8] px-4 py-3 flex items-center gap-3">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[11px] font-black text-mid uppercase tracking-widest hover:text-ink shrink-0">
+          <ArrowLeft size={12} /> Back
+        </button>
+        <select
+          value={selectedFlowId ?? ''}
+          onChange={e => setSelectedFlowId(e.target.value || null)}
+          className="flex-1 bg-[#FAF9F6] border border-sand rounded-xl px-3 py-2 text-[13px] font-mono text-ink focus:outline-none focus:border-burnt"
+        >
+          <option value="">Select a flow…</option>
+          {flows.map(f => (
+            <option key={f.flow_id} value={f.flow_id}>
+              {f.name ?? f.flow_id} · {f.event_count} events
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* ── Sidebar — desktop only ───────────────────────────── */}
+      <aside className="hidden md:flex w-[280px] bg-white border-r border-[#F0EDE8] flex-col fixed h-screen z-20">
         <div className="p-8 pb-6 border-b border-[#F0EDE8]">
           <div className="flex items-center justify-center gap-2 mb-6">
             <img src={logo} alt="HawkTrace" className="h-10 w-10 object-contain" />
@@ -270,7 +289,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
       </aside>
 
       {/* ── Main ─────────────────────────────────────────────── */}
-      <div className="flex-1 ml-[280px] overflow-y-auto">
+      <div className="flex-1 ml-0 md:ml-[280px] overflow-y-auto pt-[60px] md:pt-0">
         {!flowDetail ? (
           <div className="flex items-center justify-center min-h-screen">
             <div className="text-center">
@@ -284,7 +303,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="p-10 space-y-8 max-w-5xl"
+            className="p-4 md:p-10 space-y-8 max-w-5xl"
           >
             {/* Flow metadata */}
             <div>

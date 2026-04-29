@@ -1,7 +1,7 @@
 export function Footer() {
   return (
     <footer className="py-7 px-8 border-t border-stone/60 bg-[#F5F4F1]">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center md:justify-between gap-4">
         {/* Left: Lab name */}
         <span className="font-serif text-base font-semibold text-ink">
           XXXX Labs

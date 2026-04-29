@@ -123,7 +123,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed top-0 inset-x-0 z-50 flex justify-center pt-5 px-6"
+        className="fixed top-0 inset-x-0 z-50 flex justify-center pt-5 px-4 md:px-6"
       >
         <nav
           className="w-full max-w-6xl flex items-center justify-between px-6 py-3 rounded-full"
@@ -141,8 +141,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
             <span className="font-serif text-[1.1rem] font-bold tracking-tight text-ink">HawkTrace</span>
           </div>
 
-          {/* Center: nav links */}
-          <div className="flex items-center gap-8 text-[13px] text-mid font-sans font-medium">
+          {/* Center: nav links — desktop only */}
+          <div className="hidden md:flex items-center gap-8 text-[13px] text-mid font-sans font-medium">
             {[
               { label: 'Dashboard', id: 'dashboard' },
               { label: 'Flows', id: 'flows' },
@@ -166,10 +166,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
             ))}
           </div>
 
-          {/* Right: record flow */}
+          {/* Right: record flow — desktop only */}
           <button
             onClick={onRecordFlow}
-            className="text-[13px] font-medium px-5 py-2 rounded-full active:scale-95 transition-all duration-200"
+            className="hidden md:block text-[13px] font-medium px-5 py-2 rounded-full active:scale-95 transition-all duration-200"
             style={{
               background: 'rgba(229,98,42,0.18)',
               backdropFilter: 'blur(12px)',
@@ -184,7 +184,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
       </motion.div>
 
       {/* Main Content */}
-      <main className="px-14 pt-28 pb-16 relative z-10 max-w-[1400px] mx-auto">
+      <main className="px-4 md:px-14 pt-28 pb-16 relative z-10 max-w-[1400px] mx-auto">
         <motion.div
           initial="hidden"
           animate="visible"
@@ -195,7 +195,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
           <div id="dashboard" className="space-y-10 scroll-mt-16">
             <motion.header variants={itemVariants} className="flex items-end pt-2">
               <div className="space-y-1.5">
-                <h2 className="text-4xl font-serif font-bold text-ink tracking-tight">Dashboard</h2>
+                <h2 className="text-2xl md:text-4xl font-serif font-bold text-ink tracking-tight">Dashboard</h2>
                 <div className="flex items-center gap-3">
                   <p className="text-sm font-mono text-mid">{today}</p>
                   {!loading && pendingFlows > 0 && (
@@ -213,7 +213,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
               </div>
             </motion.header>
 
-            <motion.section variants={itemVariants} className="grid grid-cols-3 gap-6">
+            <motion.section variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <RefinedStatCard
                 label="Flows Recorded"
                 value={loading ? '—' : String(totalFlows)}
@@ -242,7 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {[0, 1].map(i => (
                   <div key={i} className="rounded-2xl p-8 h-52 animate-pulse" style={{ border: '1px solid rgba(229,98,42,0.15)', background: 'rgba(229,98,42,0.03)' }} />
                 ))}
@@ -252,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
                 <p className="font-mono text-sm text-mid">No flows recorded yet.</p>
                 <button
                   onClick={onRecordFlow}
-                  className="flex items-center gap-2 text-[13px] font-medium px-6 py-2.5 rounded-full active:scale-95 transition-all"
+                  className="hidden md:flex items-center gap-2 text-[13px] font-medium px-6 py-2.5 rounded-full active:scale-95 transition-all"
                   style={{
                     background: 'rgba(229,98,42,0.12)',
                     border: '1px solid rgba(229,98,42,0.35)',
@@ -264,7 +264,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {flows.slice(0, 6).map(flow => (
                   <FlowCard
                     key={flow.flow_id}

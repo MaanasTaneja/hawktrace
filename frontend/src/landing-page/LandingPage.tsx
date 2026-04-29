@@ -52,11 +52,12 @@ export function LandingPage({ onSignInClick, onGetStarted, onAbout }: LandingPag
 
       <Navbar onSignInClick={onSignInClick} onGetStarted={onGetStarted} onAbout={onAbout} />
 
-      {/* Hawk: fixed right 45%, fades as WhatIsQA scrolls away */}
+      {/* Hawk: fixed right 45%, fades as WhatIsQA scrolls away — desktop only */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.9, delay: 0.35 }}
+        className="hidden md:block"
         style={{
           position: 'fixed',
           top: 0,
@@ -75,7 +76,7 @@ export function LandingPage({ onSignInClick, onGetStarted, onAbout }: LandingPag
       {/* Left column — Hero + WhatIsQA */}
       <div
         ref={wrapperRef}
-        className="relative w-[55%] z-10"
+        className="relative w-full md:w-[55%] z-10"
         style={{ paddingTop: NAV_H + 16, paddingBottom: 30 }}
       >
         {/* Hero snap section */}

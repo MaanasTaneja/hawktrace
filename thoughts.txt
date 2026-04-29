@@ -55,7 +55,28 @@ curl -X POST http://localhost:8001/users/token \
     -d "username=testuser&password=secret123"
     -v
 
+curl -X POST http://localhost:8001/users/token -H "Content-Type: application/x-www-form-urlencoded" -d "username=brotha&password=test"
+
 curl http://localhost:8001/users/me -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwiZXhwIjoxNzc1OTQ0MTg0fQ.alhFf0ZBNxxc0gRetjw8jBExCcLnx9YOakefvHYSCz4"
 
 
-curl http://localhost:8001/flows/all -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwiZXhwIjoxNzc1OTQ0MTg0fQ.alhFf0ZBNxxc0gRetjw8jBExCcLnx9YOakefvHYSCz4"
+curl http://localhost:8001/flows/all -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImJyb3RoYSIsImV4cCI6MTc3NTk3MTYyOX0.OOI52WMB_iB40EPOnsXuK1rm1Qo4OzucIcxtLSmRwRw"
+
+
+curl -s http://localhost:8001/flows/93aa2b06-72db-4b43-98fe-6aeb21604963/events -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJ1c2VybmFtZSI6ImJyb3RoYSIsImV4cCI6MTc3NTk3MTYyOX0.OOI52WMB_iB40EPOnsXuK1rm1Qo4OzucIcxtLSmRwRw" | jq .
+
+
+
+
+
+so the the agent recpipe should be as follows
+
+{
+    goal,
+    steps -> {
+        id,
+        ts,
+        action,
+        target
+    }
+}

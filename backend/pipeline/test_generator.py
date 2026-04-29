@@ -104,6 +104,7 @@ def analyze_flow_video(flow_id: str, goal: str | None = None, success_criteria: 
     observations = _parse_observations(raw)
 
     stored = {"goal": goal, "success_criteria": success_criteria, "observations": observations}
+    
     with db.get_session() as session:
         #upsert the generated recipe into the db.
         saved = upsert_generated_tests(

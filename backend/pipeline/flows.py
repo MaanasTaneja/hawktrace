@@ -27,6 +27,10 @@ from models import (
     UserRead,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 router = APIRouter(prefix="/flows")
 
 
@@ -61,6 +65,7 @@ def get_video(
     current_user: UserRead = Depends(get_current_user),
 ):
     with db.get_session() as session:
+        #retirve flow record and then get the flow video path.
         flow = get_flow_by_id(session, flow_id)
         #if current user id is not the flow user id then we wil lnot show this one
         if not flow or flow.user_id != current_user.id:
@@ -123,6 +128,8 @@ def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user))
             raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=500, detail=str(e))
+        
+        logger.info(events) #log events for debugging
 
         #return the flow events from our 
         return FlowEventsRead(
@@ -144,6 +151,7 @@ def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
         flow = get_flow_by_id(session, flow_id)
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
+        #need to rename this shit? get_video_analysis or recipe.
         tests = get_tests_by_flow_id(session, flow_id)
         #fetch the tests?
 
@@ -219,7 +227,7 @@ async def generate_tests(
     #celery task here
     #provide another route to poll reuslts. but thats it.
     #insde the cleery task we will also update redis to store the progress of the agent recipie creation.
-    
+
     from .test_generator import analyze_flow_video
 
     with db.get_session() as session:

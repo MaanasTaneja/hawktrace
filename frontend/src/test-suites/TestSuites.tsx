@@ -135,6 +135,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
       if (testsRes.ok) {
         const data = await testsRes.json();
         if (data.observations?.length > 0) {
+          console.log('[HawkTrace] flow analysis (loaded):', data);
           setObservations(data.observations);
           setStoredGoal(data.goal ?? null);
           setStoredSuccessCriteria(data.success_criteria ?? null);
@@ -164,6 +165,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
+      console.log('[HawkTrace] flow analysis (fresh):', data);
       setObservations(data.observations);
       setStoredGoal(data.goal ?? null);
       setStoredSuccessCriteria(data.success_criteria ?? null);

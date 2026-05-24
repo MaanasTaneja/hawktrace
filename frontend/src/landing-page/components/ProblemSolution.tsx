@@ -87,7 +87,7 @@ export function ProblemSolution() {
 
         {/* 6-column feature grid (2 rows x 3 cols) */}
         <motion.div
-          className="grid grid-cols-3 gap-x-14 gap-y-14"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-14 gap-y-14"
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"

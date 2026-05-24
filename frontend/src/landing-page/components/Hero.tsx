@@ -28,7 +28,7 @@ export function Hero({ onGetStarted }: HeroProps) {
       <div className="px-8">
         {/* Typewriter: Lab name */}
         <div className="mb-4">
-          <span className="font-serif text-7xl font-semibold text-ink tracking-wide">
+          <span className="font-serif text-5xl md:text-7xl font-semibold text-ink tracking-wide">
             {labName}
             {!nameComplete && (
               <motion.span
@@ -54,7 +54,7 @@ export function Hero({ onGetStarted }: HeroProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.5 }}
-          className="font-sans text-[22px] text-mid leading-relaxed mb-8"
+          className="font-sans text-[17px] md:text-[22px] text-mid leading-relaxed mb-8"
         >
           A research lab building autonomous testing infrastructure for teams
           that move fast and cannot afford to break things.

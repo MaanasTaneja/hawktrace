@@ -61,7 +61,7 @@ export const FlowCard: React.FC<FlowCardProps> = ({
         <div className="flex gap-5">
           <button
             onClick={e => { e.stopPropagation(); onRecordFlow(); }}
-            className="text-[11px] font-mono text-mid uppercase tracking-widest hover:text-ink transition-colors"
+            className="hidden md:block text-[11px] font-mono text-mid uppercase tracking-widest hover:text-ink transition-colors"
           >
             New Recording
           </button>

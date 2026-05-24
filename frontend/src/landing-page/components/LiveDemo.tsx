@@ -50,7 +50,7 @@ export function LiveDemo() {
           </div>
 
           {/* Demo content placeholder */}
-          <div className="bg-[#1a1918] h-[480px] flex items-center justify-center relative overflow-hidden">
+          <div className="bg-[#1a1918] h-[280px] md:h-[480px] flex items-center justify-center relative overflow-hidden">
             {/* Subtle grid */}
             <div
               className="absolute inset-0 opacity-[0.06]"

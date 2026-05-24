@@ -34,8 +34,8 @@ export const RecentTestRuns: React.FC<RecentTestRunsProps> = ({ flows, onViewTes
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(229,98,42,0.2)' }}>
-      <table className="w-full text-left border-collapse">
+    <div className="rounded-2xl overflow-hidden overflow-x-auto" style={{ border: '1px solid rgba(229,98,42,0.2)' }}>
+      <table className="w-full min-w-[500px] text-left border-collapse">
         <thead>
           <tr style={{ borderBottom: '1px solid rgba(229,98,42,0.15)' }}>
             <th className="px-6 py-3.5 text-[10px] font-mono text-mid uppercase tracking-widest">Flow</th>

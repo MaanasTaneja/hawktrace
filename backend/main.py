@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from pipeline.browser_session import router as browser_router
 from pipeline.flows import router as flows_router
+from pipeline.agents import router as agents_router
 from users.users import user_router
 
 load_dotenv()
@@ -28,6 +29,7 @@ app.add_middleware(
 
 app.include_router(browser_router)
 app.include_router(flows_router)
+app.include_router(agents_router)
 app.include_router(user_router)
 
 

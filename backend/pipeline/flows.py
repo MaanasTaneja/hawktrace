@@ -12,6 +12,8 @@ from database.ht_flows import (
     delete_flow as db_delete_flow,
     get_flow_by_id,
     get_flows_for_user,
+    get_latest_run_for_flow,
+    get_runs_for_flow,
     get_tests_by_flow_id,
     load_flow_events,
     rename_flow as db_rename_flow,
@@ -44,17 +46,21 @@ def _flow_video_path(flow_id: str, video_path: str | None) -> Path:
 def list_flows(current_user: UserRead = Depends(get_current_user)):
     with db.get_session() as session:
         rows = get_flows_for_user(session, current_user.id)
-        return [
-            FlowListItem(
+        result = []
+        for row in rows:
+            latest_run = get_latest_run_for_flow(session, row.id)
+            result.append(FlowListItem(
                 flow_id=row.id,
                 name=row.flow_name,
                 started_at=row.started_at.timestamp(),
                 frame_count=row.frame_count,
                 event_count=row.event_count,
-                has_tests=row.status.value == "tests_generated" or row.generated_test is not None,
-            )
-            for row in rows
-        ]
+                has_tests=row.generated_test is not None,
+                has_agent=row.agent_recipe is not None,
+                agent_active=row.agent_recipe.is_active if row.agent_recipe else True,
+                last_run_status=latest_run.status.value if latest_run else None,
+            ))
+        return result
 
 
 @router.api_route("/{flow_id}/video", methods=["GET", "HEAD"])
@@ -159,24 +165,30 @@ def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Analysis not generated yet")
         try:
             stored = _json.loads(tests.bdd_text)
-            # new format: {goal, success_criteria, observations}
-            if isinstance(stored, dict):
-                observations = stored.get("observations", [])
-                goal = stored.get("goal")
-                success_criteria = stored.get("success_criteria")
+            if isinstance(stored, dict) and "steps" in stored:
+                from database.ht_flows import get_agent_recipe
+                recipe = get_agent_recipe(session, flow_id)
+                return FlowAnalysisRead(
+                    flow_id=flow_id,
+                    goal=stored.get("goal"),
+                    success_criteria=stored.get("success_criteria"),
+                    observations=[],
+                    steps=stored.get("steps"),
+                    agent_active=recipe.is_active if recipe else True,
+                )
+            elif isinstance(stored, dict):
+                # Old format: {goal, success_criteria, observations}
+                return FlowAnalysisRead(
+                    flow_id=flow_id,
+                    goal=stored.get("goal"),
+                    success_criteria=stored.get("success_criteria"),
+                    observations=stored.get("observations", []),
+                )
             else:
-                # old format: bare array
-                observations = stored
-                goal = None
-                success_criteria = None
+                # Legacy: bare observations array
+                return FlowAnalysisRead(flow_id=flow_id, observations=stored)
         except (TypeError, ValueError):
-            observations, goal, success_criteria = [], None, None
-        return FlowAnalysisRead(
-            flow_id=flow_id,
-            goal=goal,
-            success_criteria=success_criteria,
-            observations=observations,
-        )
+            raise HTTPException(status_code=500, detail="Failed to parse stored analysis")
 
 
 @router.patch("/{flow_id}/rename", response_model=FlowRenameRead)
@@ -203,12 +215,20 @@ def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)
             raise HTTPException(status_code=404, detail="Flow not found")
         flow_video_path = _flow_video_path(flow_id, flow.video_path)
         flow_dir = flow_video_path.parent
+
+        # Collect run video dirs before the DB rows are deleted
+        runs = get_runs_for_flow(session, flow_id)
+        run_dirs = [Path(f"runs/{r.id}") for r in runs]
+
         deleted = db_delete_flow(session, flow_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Flow not found")
 
     if flow_dir.exists():
         shutil.rmtree(flow_dir, ignore_errors=True)
+    for run_dir in run_dirs:
+        if run_dir.exists():
+            shutil.rmtree(run_dir, ignore_errors=True)
     return FlowDeleteRead(deleted=flow_id)
 
 
@@ -228,7 +248,7 @@ async def generate_tests(
     #provide another route to poll reuslts. but thats it.
     #insde the cleery task we will also update redis to store the progress of the agent recipie creation.
 
-    from .test_generator import analyze_flow_video
+    from .test_generator import generate_agent_recipe
 
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
@@ -238,7 +258,7 @@ async def generate_tests(
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(
-            None, analyze_flow_video, flow_id, body.goal, body.success_criteria
+            None, generate_agent_recipe, flow_id
         )
         return result
     except FileNotFoundError as e:

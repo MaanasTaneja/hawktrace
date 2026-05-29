@@ -8,6 +8,8 @@ interface FlowCardProps {
   eventCount: number;
   frameCount: number;
   hasTests: boolean;
+  agentActive?: boolean;
+  lastRunStatus?: string | null;
   onRecordFlow: () => void;
   onViewTests: (flowId: string) => void;
 }
@@ -21,7 +23,7 @@ function timeAgo(timestamp: number): string {
 }
 
 export const FlowCard: React.FC<FlowCardProps> = ({
-  flowId, name, startedAt, eventCount, frameCount, hasTests,
+  flowId, name, startedAt, eventCount, frameCount, hasTests, agentActive = true, lastRunStatus,
   onRecordFlow, onViewTests
 }) => {
   const displayName = name || `Flow ${flowId.slice(0, 6)}`;
@@ -38,7 +40,7 @@ export const FlowCard: React.FC<FlowCardProps> = ({
           <h4 className="text-xl font-serif font-semibold text-ink leading-tight">
             {displayName}
           </h4>
-          <StatusBadge hasTests={hasTests} />
+          <StatusBadge hasTests={hasTests} agentActive={agentActive} lastRunStatus={lastRunStatus} />
         </div>
 
         <p className="text-[11px] font-mono text-mid">
@@ -80,14 +82,41 @@ export const FlowCard: React.FC<FlowCardProps> = ({
   );
 };
 
-const StatusBadge: React.FC<{ hasTests: boolean }> = ({ hasTests }) => (
-  <span
-    className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
-    style={hasTests
-      ? { background: 'rgba(22,163,74,0.08)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)' }
-      : { background: 'rgba(229,98,42,0.08)', color: '#E5622A', border: '1px solid rgba(229,98,42,0.25)' }
-    }
-  >
-    {hasTests ? 'READY' : 'PENDING'}
-  </span>
-);
+const StatusBadge: React.FC<{ hasTests: boolean; agentActive?: boolean; lastRunStatus?: string | null }> = ({ hasTests, agentActive = true, lastRunStatus }) => {
+  if (hasTests && !agentActive) return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+      style={{ background: 'rgba(239,68,68,0.08)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.2)' }}>
+      DEACTIVATED
+    </span>
+  );
+  if (lastRunStatus === 'passed') return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+      style={{ background: 'rgba(22,163,74,0.08)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)' }}>
+      PASSING
+    </span>
+  );
+  if (lastRunStatus === 'failed') return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+      style={{ background: 'rgba(239,68,68,0.08)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.2)' }}>
+      FAILING
+    </span>
+  );
+  if (lastRunStatus === 'running') return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+      style={{ background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>
+      RUNNING
+    </span>
+  );
+  if (hasTests) return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+      style={{ background: 'rgba(22,163,74,0.08)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)' }}>
+      READY
+    </span>
+  );
+  return (
+    <span className="px-2 py-0.5 rounded text-[10px] font-mono tracking-widest"
+      style={{ background: 'rgba(229,98,42,0.08)', color: '#E5622A', border: '1px solid rgba(229,98,42,0.25)' }}>
+      PENDING
+    </span>
+  );
+};

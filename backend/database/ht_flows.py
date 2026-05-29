@@ -1,5 +1,7 @@
 import json
 import os
+import uuid
+from secrets_crypto import encrypt_secret, decrypt_secret
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -7,10 +9,16 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database.ht_postgres import (
+    AgentRecipeTable,
+    AgentRunTable,
+    AgentRunStatus,
+    AgentScheduleTable,
+    FlowSecretTable,
     FlowStatus,
     FlowsTable,
     GeneratedTestsTable,
     PostgresDB,
+    ScheduleType,
     UserTable,
 )
 
@@ -163,3 +171,174 @@ def upsert_recorded_flow(
     session.commit()
     session.refresh(flow)
     return flow
+
+
+# --- Agent recipe ---
+
+def upsert_agent_recipe(
+    session: Session,
+    flow_id: str,
+    goal: str,
+    success_criteria: str,
+    steps: list,
+) -> AgentRecipeTable | None:
+    flow = get_flow_by_id(session, flow_id)
+    if not flow:
+        return None
+
+    recipe = session.query(AgentRecipeTable).filter_by(flow_id=flow_id).first()
+    steps_json = json.dumps(steps)
+
+    if recipe is None:
+        recipe = AgentRecipeTable(
+            flow_id=flow_id,
+            goal=goal,
+            success_criteria=success_criteria,
+            steps=steps_json,
+        )
+        session.add(recipe)
+    else:
+        recipe.goal = goal
+        recipe.success_criteria = success_criteria
+        recipe.steps = steps_json
+
+    flow.status = FlowStatus.AGENT_READY
+    session.commit()
+    session.refresh(recipe)
+    return recipe
+
+
+def get_agent_recipe(session: Session, flow_id: str) -> AgentRecipeTable | None:
+    return session.query(AgentRecipeTable).filter_by(flow_id=flow_id).first()
+
+
+def set_agent_active(session: Session, flow_id: str, is_active: bool) -> AgentRecipeTable | None:
+    recipe = get_agent_recipe(session, flow_id)
+    if not recipe:
+        return None
+    recipe.is_active = is_active
+    session.commit()
+    session.refresh(recipe)
+    return recipe
+
+
+# --- Agent runs ---
+
+def create_agent_run(
+    session: Session,
+    flow_id: str,
+    triggered_by: str,
+) -> AgentRunTable:
+    run = AgentRunTable(
+        id=str(uuid.uuid4()),
+        flow_id=flow_id,
+        triggered_by=triggered_by,
+        status=AgentRunStatus.RUNNING,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def update_agent_run(
+    session: Session,
+    run_id: str,
+    status: AgentRunStatus,
+    report: dict,
+) -> AgentRunTable | None:
+    run = session.get(AgentRunTable, run_id)
+    if not run:
+        return None
+    run.status = status
+    run.report = json.dumps(report)
+    session.commit()
+    session.refresh(run)
+    return run
+
+
+def get_latest_run_for_flow(session: Session, flow_id: str) -> AgentRunTable | None:
+    return (
+        session.query(AgentRunTable)
+        .filter_by(flow_id=flow_id)
+        .order_by(AgentRunTable.ran_at.desc())
+        .first()
+    )
+
+
+def get_runs_for_flow(session: Session, flow_id: str) -> list[AgentRunTable]:
+    return (
+        session.query(AgentRunTable)
+        .filter_by(flow_id=flow_id)
+        .order_by(AgentRunTable.ran_at.desc())
+        .all()
+    )
+
+
+# --- Agent schedule ---
+
+def upsert_agent_schedule(
+    session: Session,
+    flow_id: str,
+    schedule_type: ScheduleType,
+    next_run_at: datetime | None = None,
+) -> AgentScheduleTable | None:
+    recipe = get_agent_recipe(session, flow_id)
+    if not recipe:
+        return None
+
+    schedule = session.query(AgentScheduleTable).filter_by(flow_id=flow_id).first()
+    is_active = schedule_type != ScheduleType.NONE
+
+    if schedule is None:
+        schedule = AgentScheduleTable(
+            flow_id=flow_id,
+            schedule_type=schedule_type,
+            next_run_at=next_run_at,
+            is_active=is_active,
+        )
+        session.add(schedule)
+    else:
+        schedule.schedule_type = schedule_type
+        schedule.next_run_at = next_run_at
+        schedule.is_active = is_active
+
+    session.commit()
+    session.refresh(schedule)
+    return schedule
+
+
+# --- Flow secrets ---
+
+def get_secrets_for_flow(session: Session, flow_id: str) -> list[FlowSecretTable]:
+    return session.query(FlowSecretTable).filter_by(flow_id=flow_id).all()
+
+
+def upsert_secret(session: Session, flow_id: str, key: str, value: str) -> FlowSecretTable:
+    encrypted = encrypt_secret(value)
+    secret = (
+        session.query(FlowSecretTable)
+        .filter_by(flow_id=flow_id, key=key)
+        .first()
+    )
+    if secret is None:
+        secret = FlowSecretTable(flow_id=flow_id, key=key, value=encrypted)
+        session.add(secret)
+    else:
+        secret.value = encrypted
+    session.commit()
+    session.refresh(secret)
+    return secret
+
+
+def resolve_secrets(steps: list[dict], secrets: list[FlowSecretTable]) -> list[dict]:
+    """Substitute {{secret:KEY}} placeholders in step values with stored secrets."""
+    secret_map = {s.key: decrypt_secret(s.value) for s in secrets}
+    resolved = []
+    for step in steps:
+        s = dict(step)
+        if s.get("value") and isinstance(s["value"], str):
+            for key, val in secret_map.items():
+                s["value"] = s["value"].replace(f"{{{{secret:{key}}}}}", val)
+        resolved.append(s)
+    return resolved

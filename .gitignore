@@ -10,8 +10,12 @@ __pycache__/
 venv/
 *.egg-info/
 
-# recorded flows
+# recorded flows and agent run artifacts
 backend/flows/
+backend/runs/
+
+# celery runtime
+backend/celerybeat-schedule
 
 # node
 frontend/node_modules/

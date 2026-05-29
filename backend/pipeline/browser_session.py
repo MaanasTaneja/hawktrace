@@ -213,6 +213,11 @@ async def browser_session(websocket: WebSocket):
                 # ── flow control ────────────────────────────────────────────
                 if t == "start_flow":
                     flow_id = recorder.start(current_user.id)
+                    # Inject the current page URL as the first event so the
+                    # agent knows where to navigate before replaying steps
+                    current_url = page.url
+                    if current_url and current_url not in ("about:blank", ""):
+                        recorder.record_event({"type": "navigate", "url": current_url})
                     await websocket.send_json({"type": "flow_started", "flow_id": flow_id})
                     continue
 
@@ -274,9 +279,10 @@ async def browser_session(websocket: WebSocket):
                         if active:
                             # update pending fill with latest value
                             el_meta = {k: v for k, v in active.items() if k != "value"}
+                            is_password = active.get("input_type") == "password"
                             pending_fill = {
                                 "type": "fill",
-                                "value": active["value"],
+                                "value": "{{secret:PASSWORD}}" if is_password else active["value"],
                                 "element": el_meta,
                             }
                         else:

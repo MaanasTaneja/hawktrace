@@ -2,7 +2,7 @@ import json
 import re
 from pathlib import Path
 from dotenv import load_dotenv
-from prompts import VIDEO_ANALYSIS_PROMPT
+from prompts import AGENT_RECIPE_PROMPT
 from clients.gemini import upload_clip, _call_gemini
 from database.ht_flows import db, get_flow_by_id, load_flow_events, upsert_generated_tests
 
@@ -64,15 +64,39 @@ def _format_events_for_analysis(events: list[dict]) -> list[dict]:
     return result
 
 
-def _parse_observations(raw: str) -> list[dict]:
-    """Extract JSON array from Gemini response."""
-    match = re.search(r'\[.*\]', raw, re.DOTALL)
-    if match:
-        return json.loads(match.group(0))
-    return json.loads(raw)
+def _parse_recipe(raw: str) -> dict:
+    """Extract and validate the JSON recipe from Gemini's response."""
+    # Strip markdown fences if Gemini ignored the instruction
+    text = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.MULTILINE)
+    text = re.sub(r"\s*```$", "", text.strip(), flags=re.MULTILINE)
+
+    try:
+        recipe = json.loads(text.strip())
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Gemini returned invalid JSON: {e}\n\nRaw response:\n{raw[:500]}")
+
+    required = {"goal", "success_criteria", "steps"}
+    missing = required - set(recipe.keys())
+    if missing:
+        raise ValueError(f"Recipe missing required fields: {missing}")
+
+    if not isinstance(recipe["steps"], list) or len(recipe["steps"]) == 0:
+        raise ValueError("Recipe steps must be a non-empty list")
+
+    valid_action_types = {"navigate", "click", "fill", "scroll", "select"}
+    for step in recipe["steps"]:
+        if step.get("action_type") not in valid_action_types:
+            raise ValueError(
+                f"Step {step.get('step_id')} has invalid action_type: '{step.get('action_type')}'"
+            )
+        if "assertions" not in step or "tier3_expected_visual" not in step.get("assertions", {}):
+            raise ValueError(f"Step {step.get('step_id')} missing assertions.tier3_expected_visual")
+
+    return recipe
 
 
-def analyze_flow_video(flow_id: str, goal: str | None = None, success_criteria: str | None = None) -> dict:
+def generate_agent_recipe(flow_id: str) -> dict:
+    """Analyze a recorded flow and return a structured agent recipe."""
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
         if not flow:
@@ -87,35 +111,26 @@ def analyze_flow_video(flow_id: str, goal: str | None = None, success_criteria: 
     clean_events = _format_events_for_analysis(events)
     events_json = json.dumps(clean_events, indent=2)
 
-    goal_context = ""
-    if goal:
-        goal_context = f"\nFlow goal: {goal}\n"
-    if success_criteria:
-        goal_context += f"Success criteria: {success_criteria}\n"
-
-    print(f"[analysis] uploading {mp4_path} to Gemini...")
+    print(f"[recipe] uploading {mp4_path} to Gemini...")
     file_uri = upload_clip(str(mp4_path))
 
-    print(f"[analysis] calling Gemini for flow {flow_id}...")
-    prompt = VIDEO_ANALYSIS_PROMPT.format(goal_context=goal_context, events_json=events_json)
-    #long running task this one.
+    print(f"[recipe] calling Gemini for flow {flow_id}...")
+    prompt = AGENT_RECIPE_PROMPT.replace("{events_json}", events_json)
     raw = _call_gemini(file_uri, prompt, fps=fps)
 
-    observations = _parse_observations(raw)
+    print(f"[recipe] parsing response for flow {flow_id}...")
+    recipe = _parse_recipe(raw)
 
-    stored = {"goal": goal, "success_criteria": success_criteria, "observations": observations}
-    
     with db.get_session() as session:
-        #upsert the generated recipe into the db.
         saved = upsert_generated_tests(
             session=session,
             flow_id=flow_id,
-            bdd_text=json.dumps(stored),
+            bdd_text=json.dumps(recipe),
             playwright_text="",
             model_name="gemini-3.1-pro-preview",
         )
         if not saved:
             raise FileNotFoundError(f"Flow {flow_id} not found in database")
 
-    print(f"[analysis] saved {len(observations)} observations for flow {flow_id}")
-    return {"flow_id": flow_id, "goal": goal, "success_criteria": success_criteria, "observations": observations}
+    print(f"[recipe] saved {len(recipe['steps'])} steps for flow {flow_id}")
+    return recipe

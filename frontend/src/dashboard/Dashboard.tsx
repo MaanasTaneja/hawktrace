@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import logo from '../assets/HawkTrace-Logo.png';
-import { LogOut, Plus, User, Settings as SettingsIcon } from 'lucide-react';
+import { LogOut, Plus, User, Settings as SettingsIcon, Search, ChevronDown } from 'lucide-react';
 import { FlowCard } from './components/FlowCard.tsx';
 import { RecentTestRuns, type Flow } from './components/RecentTestRuns.tsx';
 import { RefinedStatCard } from './components/RefinedStatCard.tsx';
@@ -22,6 +22,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
   const [flows, setFlows] = React.useState<Flow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState<string>('all');
+  const [filterDropdownOpen, setFilterDropdownOpen] = React.useState(false);
+  const filterRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!filterDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [filterDropdownOpen]);
   const pillRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -101,9 +114,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
   });
 
   const totalFlows = flows.length;
-  const testsGenerated = flows.filter(f => f.has_tests).length;
-  const totalEvents = flows.reduce((sum, f) => sum + f.event_count, 0);
+  const agentsPassed = flows.filter(f => f.last_run_status === 'passed').length;
+  const agentsFailed = flows.filter(f => f.last_run_status === 'failed').length;
   const pendingFlows = flows.filter(f => !f.has_tests).length;
+
+  const filteredFlows = flows.filter(f => {
+    const matchesSearch = !search || (f.name ?? f.flow_id).toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'passing') return f.last_run_status === 'passed';
+    if (statusFilter === 'failing') return f.last_run_status === 'failed';
+    if (statusFilter === 'ready') return f.has_tests && f.last_run_status == null;
+    if (statusFilter === 'pending') return !f.has_tests;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[#F5F4F1] font-sans selection:bg-burnt/10">
@@ -221,24 +245,84 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
                 isPositive={true}
               />
               <RefinedStatCard
-                label="Tests Generated"
-                value={loading ? '—' : String(testsGenerated)}
-                trend={totalFlows > 0 ? `${Math.round((testsGenerated / totalFlows) * 100)}%` : '0%'}
+                label="Agents Passed"
+                value={loading ? '—' : String(agentsPassed)}
+                trend={totalFlows > 0 ? `${Math.round((agentsPassed / totalFlows) * 100)}%` : '0%'}
                 isPositive={true}
               />
               <RefinedStatCard
-                label="Total Events"
-                value={loading ? '—' : String(totalEvents)}
-                trend={totalFlows > 0 ? `avg ${Math.round(totalEvents / totalFlows)}` : '0'}
-                isPositive={true}
+                label="Agents Failed"
+                value={loading ? '—' : String(agentsFailed)}
+                trend={totalFlows > 0 ? `${Math.round((agentsFailed / totalFlows) * 100)}%` : '0%'}
+                isPositive={agentsFailed === 0}
               />
             </motion.section>
           </div>
 
           {/* Recorded Flows */}
           <motion.section id="flows" variants={itemVariants} className="scroll-mt-16">
-            <div className="flex items-center justify-between mb-8 pb-4" style={{ borderBottom: '1px solid rgba(229,98,42,0.15)' }}>
+            <div className="mb-6 pb-4 space-y-4" style={{ borderBottom: '1px solid rgba(229,98,42,0.15)' }}>
               <h3 className="text-2xl font-serif font-semibold text-ink">Recorded Flows</h3>
+              <div className="flex items-center gap-3">
+                {/* Search */}
+                <div className="relative flex-1 max-w-xs">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-mid pointer-events-none" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search flows…"
+                    className="w-full pl-8 pr-4 py-2 text-[13px] font-sans text-ink rounded-full bg-white focus:outline-none focus:ring-1 focus:ring-burnt/30 transition-all"
+                    style={{ border: '1px solid rgba(229,98,42,0.2)' }}
+                  />
+                </div>
+                {/* Status dropdown */}
+                <div ref={filterRef} className="relative ml-auto">
+                  <button
+                    onClick={() => setFilterDropdownOpen(o => !o)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-sans font-medium transition-all"
+                    style={{
+                      background: 'white',
+                      border: '1px solid rgba(229,98,42,0.2)',
+                      color: statusFilter === 'all' ? '#8C7B6B' : '#E5622A',
+                    }}
+                  >
+                    {statusFilter === 'all' ? 'All Flows' : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                    <ChevronDown size={13} className={`transition-transform duration-200 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {filterDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute right-0 mt-2 w-44 rounded-2xl overflow-hidden z-20 py-1"
+                      style={{
+                        background: 'rgba(245,244,241,0.98)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(226,223,216,0.8)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)',
+                      }}
+                    >
+                      {[
+                        { value: 'all', label: 'All Flows' },
+                        { value: 'passing', label: 'Passing' },
+                        { value: 'failing', label: 'Failing' },
+                        { value: 'ready', label: 'Ready' },
+                        { value: 'pending', label: 'Pending' },
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => { setStatusFilter(opt.value); setFilterDropdownOpen(false); }}
+                          className="w-full text-left px-4 py-2.5 text-[13px] font-sans transition-colors hover:bg-sand/40"
+                          style={{ color: statusFilter === opt.value ? '#E5622A' : '#4A3F35', fontWeight: statusFilter === opt.value ? 600 : 400 }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {loading ? (
@@ -263,21 +347,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
                   Record Your First Flow
                 </button>
               </div>
+            ) : filteredFlows.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-2">
+                <p className="font-mono text-sm text-mid">No flows match your filters.</p>
+              </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {flows.slice(0, 6).map(flow => (
-                  <FlowCard
-                    key={flow.flow_id}
-                    flowId={flow.flow_id}
-                    name={flow.name}
-                    startedAt={flow.started_at}
-                    eventCount={flow.event_count}
-                    frameCount={flow.frame_count}
-                    hasTests={flow.has_tests}
-                    onRecordFlow={onRecordFlow}
-                    onViewTests={onViewTests}
-                  />
-                ))}
+              <div
+                className="overflow-y-auto flows-scroll"
+                style={{
+                  maxHeight: '540px',
+                  paddingTop: '4px',
+                  paddingBottom: '2px',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(229,98,42,0.25) transparent',
+                }}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {filteredFlows.map(flow => (
+                    <FlowCard
+                      key={flow.flow_id}
+                      flowId={flow.flow_id}
+                      name={flow.name}
+                      startedAt={flow.started_at}
+                      eventCount={flow.event_count}
+                      frameCount={flow.frame_count}
+                      hasTests={flow.has_tests}
+                      agentActive={flow.agent_active ?? true}
+                      lastRunStatus={flow.last_run_status}
+                      onRecordFlow={onRecordFlow}
+                      onViewTests={onViewTests}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </motion.section>
@@ -290,7 +391,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSignOut, onRecordFlow, o
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-2xl font-serif font-semibold text-ink">All Flows</h3>
             </div>
-            <RecentTestRuns flows={flows} onViewTests={onViewTests} />
+            <RecentTestRuns flows={filteredFlows} onViewTests={onViewTests} />
           </motion.section>
         </motion.div>
       </main>

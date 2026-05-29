@@ -42,5 +42,11 @@ export function authFetch(url: string, options: RequestInit = {}): Promise<Respo
     ...(options.headers as Record<string, string> ?? {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(url, { ...options, headers });
+  return fetch(url, { ...options, headers }).then(res => {
+    if (res.status === 401) {
+      clearAuth();
+      window.location.reload();
+    }
+    return res;
+  });
 }

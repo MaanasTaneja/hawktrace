@@ -80,3 +80,40 @@ so the the agent recpipe should be as follows
         target
     }
 }
+
+
+'''
+
+agent logic
+
+- we have the recording and the events. now close the loop — have agent replay it and tell us if something broke.
+
+- gemini watches the video + reads the event trace and outputs a recipe.
+  goal, success criteria, steps.
+  each step has action type (navigate, click, fill, scroll), target (aria role, label, placeholder), value if its a fill, and tiered assertions.
+
+- three tiers of verification per step.
+  tier 1 — check the url or look for a text string on the page. cheap, instant.
+  tier 2 — dump the accessibility tree and ask gemini if the page state looks right.
+  tier 3 — take a screenshot, send to gemini, does the visual match what we expected.
+  agent tries tier 1 first. passes? done. fails? escalate. not burning gemini on every step.
+
+- playwright runs headless inside the celery worker.
+  each run gets its own browser context with video recording on.
+  context closes → playwright finalizes the webm → ffmpeg remuxes it so chrome can scrub the timeline.
+
+- passwords get redacted at record time.
+  browser_session.py sees input_type === "password" and writes {{secret:PASSWORD}} instead of the real value.
+  gemini copies the placeholder verbatim into the recipe.
+  user enters the real value in the secrets panel after launching the agent.
+  pipeline substitutes it before the agent runs.
+
+- scheduling via celery beat.
+  checks agent_schedules for rows where is_active and next_run_at is past.
+  fires the same run_qa_agent task the manual button uses, triggered_by just says "scheduled".
+
+- frontend polls the runs endpoint every 5 seconds. no websockets, no long polling, just a timeout loop.
+
+- failures trigger an email with the full report — per step pass/fail, which tier caught it, link to the run video.
+
+'''

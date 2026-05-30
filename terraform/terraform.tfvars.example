@@ -1,0 +1,40 @@
+project_name      = "hawktrace"
+environment       = "prod"
+deployment_region = "us-west-2"
+
+vpc_cidr           = "10.30.0.0/16"
+public_cidr_blocks = ["10.30.1.0/24"]
+private_cidr_blocks = [
+  "10.30.11.0/24",
+  "10.30.12.0/24",
+]
+azs = [
+  "us-west-2a",
+  "us-west-2b",
+]
+
+allowed_ssh_cidrs = [
+  "203.0.113.10/32",
+]
+
+ami             = "ami-00000000000000000"
+instance_type   = "t3.micro"
+root_volume_gb  = 24
+repo_url        = "https://github.com/YOUR_ORG/YOUR_HAWKTRACE_REPO.git"
+repo_branch     = "main"
+
+domain_name      = "hawktrace.example.com"
+route53_zone_id  = "Z000000000000000000000"
+certbot_email    = "admin@example.com"
+
+rds_db_name            = "hawktrace"
+rds_username           = "hawktrace"
+rds_password           = "replace-with-a-real-password"
+rds_instance_class     = "db.t3.micro"
+rds_allocated_storage  = 20
+
+gemini_api_key_ssm_name          = "/hawktrace/prod/gemini_api_key"
+jwt_secret_ssm_name              = "/hawktrace/prod/jwt_secret"
+secrets_encryption_key_ssm_name  = "/hawktrace/prod/secrets_encryption_key"
+resend_api_key_ssm_name          = "/hawktrace/prod/resend_api_key"
+resend_from                      = "HawkTrace <noreply@example.com>"

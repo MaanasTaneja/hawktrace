@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from prompts import AGENT_RECIPE_PROMPT
 from clients.gemini import upload_clip, _call_gemini
-from database.ht_flows import db, get_flow_by_id, load_flow_events, upsert_generated_tests
+from database.ht_flows import db, get_flow_by_id, load_flow_events, upsert_generated_recipe
 
 load_dotenv()
 
@@ -98,6 +98,7 @@ def _parse_recipe(raw: str) -> dict:
 def generate_agent_recipe(flow_id: str) -> dict:
     """Analyze a recorded flow and return a structured agent recipe."""
     with db.get_session() as session:
+        
         flow = get_flow_by_id(session, flow_id)
         if not flow:
             raise FileNotFoundError(f"Flow {flow_id} not found")
@@ -122,12 +123,10 @@ def generate_agent_recipe(flow_id: str) -> dict:
     recipe = _parse_recipe(raw)
 
     with db.get_session() as session:
-        saved = upsert_generated_tests(
+        saved = upsert_generated_recipe(
             session=session,
             flow_id=flow_id,
-            bdd_text=json.dumps(recipe),
-            playwright_text="",
-            model_name="gemini-3.1-pro-preview",
+            agent_recipe=json.dumps(recipe),
         )
         if not saved:
             raise FileNotFoundError(f"Flow {flow_id} not found in database")

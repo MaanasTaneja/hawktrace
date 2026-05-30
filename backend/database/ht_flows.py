@@ -1,6 +1,5 @@
 import json
 import os
-import uuid
 from secrets_crypto import encrypt_secret, decrypt_secret
 from pathlib import Path
 from datetime import datetime, timezone
@@ -9,16 +8,11 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database.ht_postgres import (
-    AgentRecipeTable,
-    AgentRunTable,
-    AgentRunStatus,
-    AgentScheduleTable,
     FlowSecretTable,
     FlowStatus,
     FlowsTable,
-    GeneratedTestsTable,
+    GeneratedRecipeTable,
     PostgresDB,
-    ScheduleType,
     UserTable,
 )
 
@@ -49,11 +43,12 @@ def get_flows_for_user(session: Session, user_id: int, limit: int = 200) -> list
         .all()
     )
 
-#get flows absed on flow idf 
-def get_tests_by_flow_id(session: Session, flow_id: str) -> GeneratedTestsTable | None:
+#get flows absed on flow idf
+def get_generated_recipe_by_flow_id(session: Session, flow_id: str) -> GeneratedRecipeTable | None:
+    #why is therre no security measures for this?
     return (
-        session.query(GeneratedTestsTable)
-        .filter(GeneratedTestsTable.flow_id == flow_id)
+        session.query(GeneratedRecipeTable)
+        .filter(GeneratedRecipeTable.flow_id == flow_id)
         .first()
     )
 
@@ -79,36 +74,30 @@ def delete_flow(session: Session, flow_id: str) -> bool:
 
 
 
-#main logic where we uspert generated text need to change this to upsert flow information (json of flow desciprtin and agent receipe)
-def upsert_generated_tests(
+#main logic where we upsert the generated agent recipe JSON for a recorded flow.
+def upsert_generated_recipe(
     session: Session,
     flow_id: str,
-    bdd_text: str,
-    playwright_text: str,
-    model_name: str | None = None,
-) -> GeneratedTestsTable | None:
+    agent_recipe: str,
+) -> GeneratedRecipeTable | None:
     flow = get_flow_by_id(session, flow_id)
     if not flow:
         return None
 
-    tests = get_tests_by_flow_id(session, flow_id)
-    if tests is None:
-        tests = GeneratedTestsTable(
+    recipe = get_generated_recipe_by_flow_id(session, flow_id)
+    if recipe is None:
+        recipe = GeneratedRecipeTable(
             flow_id=flow_id,
-            bdd_text=bdd_text,
-            playwright_text=playwright_text,
-            model_name=model_name,
+            agent_recipe=agent_recipe,
         )
-        session.add(tests)
+        session.add(recipe)
     else:
-        tests.bdd_text = bdd_text
-        tests.playwright_text = playwright_text
-        tests.model_name = model_name
+        recipe.agent_recipe = agent_recipe
 
     flow.status = FlowStatus.TESTS_GENERATED
     session.commit()
-    session.refresh(tests)
-    return tests
+    session.refresh(recipe)
+    return recipe
 
 
 def load_flow_events(events_path: str) -> list[dict]:
@@ -123,8 +112,7 @@ def load_flow_events(events_path: str) -> list[dict]:
     return data
 
 
-#main upsert flow record into table, the uperset genertets test is an async operation that happens when user wants us to generatethe agent
-#keep tehm sperate. upsert agent repcie later.
+#main upsert flow record into table. Recipe generation is a separate async operation.
 def upsert_recorded_flow(
     session: Session,
     flow_id: str,
@@ -171,141 +159,6 @@ def upsert_recorded_flow(
     session.commit()
     session.refresh(flow)
     return flow
-
-
-# --- Agent recipe ---
-
-def upsert_agent_recipe(
-    session: Session,
-    flow_id: str,
-    goal: str,
-    success_criteria: str,
-    steps: list,
-) -> AgentRecipeTable | None:
-    flow = get_flow_by_id(session, flow_id)
-    if not flow:
-        return None
-
-    recipe = session.query(AgentRecipeTable).filter_by(flow_id=flow_id).first()
-    steps_json = json.dumps(steps)
-
-    if recipe is None:
-        recipe = AgentRecipeTable(
-            flow_id=flow_id,
-            goal=goal,
-            success_criteria=success_criteria,
-            steps=steps_json,
-        )
-        session.add(recipe)
-    else:
-        recipe.goal = goal
-        recipe.success_criteria = success_criteria
-        recipe.steps = steps_json
-
-    flow.status = FlowStatus.AGENT_READY
-    session.commit()
-    session.refresh(recipe)
-    return recipe
-
-
-def get_agent_recipe(session: Session, flow_id: str) -> AgentRecipeTable | None:
-    return session.query(AgentRecipeTable).filter_by(flow_id=flow_id).first()
-
-
-def set_agent_active(session: Session, flow_id: str, is_active: bool) -> AgentRecipeTable | None:
-    recipe = get_agent_recipe(session, flow_id)
-    if not recipe:
-        return None
-    recipe.is_active = is_active
-    session.commit()
-    session.refresh(recipe)
-    return recipe
-
-
-# --- Agent runs ---
-
-def create_agent_run(
-    session: Session,
-    flow_id: str,
-    triggered_by: str,
-) -> AgentRunTable:
-    run = AgentRunTable(
-        id=str(uuid.uuid4()),
-        flow_id=flow_id,
-        triggered_by=triggered_by,
-        status=AgentRunStatus.RUNNING,
-    )
-    session.add(run)
-    session.commit()
-    session.refresh(run)
-    return run
-
-
-def update_agent_run(
-    session: Session,
-    run_id: str,
-    status: AgentRunStatus,
-    report: dict,
-) -> AgentRunTable | None:
-    run = session.get(AgentRunTable, run_id)
-    if not run:
-        return None
-    run.status = status
-    run.report = json.dumps(report)
-    session.commit()
-    session.refresh(run)
-    return run
-
-
-def get_latest_run_for_flow(session: Session, flow_id: str) -> AgentRunTable | None:
-    return (
-        session.query(AgentRunTable)
-        .filter_by(flow_id=flow_id)
-        .order_by(AgentRunTable.ran_at.desc())
-        .first()
-    )
-
-
-def get_runs_for_flow(session: Session, flow_id: str) -> list[AgentRunTable]:
-    return (
-        session.query(AgentRunTable)
-        .filter_by(flow_id=flow_id)
-        .order_by(AgentRunTable.ran_at.desc())
-        .all()
-    )
-
-
-# --- Agent schedule ---
-
-def upsert_agent_schedule(
-    session: Session,
-    flow_id: str,
-    schedule_type: ScheduleType,
-    next_run_at: datetime | None = None,
-) -> AgentScheduleTable | None:
-    recipe = get_agent_recipe(session, flow_id)
-    if not recipe:
-        return None
-
-    schedule = session.query(AgentScheduleTable).filter_by(flow_id=flow_id).first()
-    is_active = schedule_type != ScheduleType.NONE
-
-    if schedule is None:
-        schedule = AgentScheduleTable(
-            flow_id=flow_id,
-            schedule_type=schedule_type,
-            next_run_at=next_run_at,
-            is_active=is_active,
-        )
-        session.add(schedule)
-    else:
-        schedule.schedule_type = schedule_type
-        schedule.next_run_at = next_run_at
-        schedule.is_active = is_active
-
-    session.commit()
-    session.refresh(schedule)
-    return schedule
 
 
 # --- Flow secrets ---

@@ -117,3 +117,6 @@ agent logic
 - failures trigger an email with the full report — per step pass/fail, which tier caught it, link to the run video.
 
 '''
+
+
+s3 -> to store the flow vdieos, and also store json of inputs (actions)

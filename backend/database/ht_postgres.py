@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Iterator
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -73,12 +73,11 @@ class FlowsTable(DBSkeleton):
 
     user: Mapped["UserTable"] = relationship(back_populates="flows")
 
-    generated_test: Mapped["GeneratedTestsTable | None"] = relationship(back_populates="flow", uselist=False, cascade="all, delete-orphan")
-    agent_recipe: Mapped["AgentRecipeTable | None"] = relationship(back_populates="flow", uselist=False, cascade="all, delete-orphan")
+    generated_recipe: Mapped["GeneratedRecipeTable | None"] = relationship(back_populates="flow", uselist=False, cascade="all, delete-orphan")
 
 
-class GeneratedTestsTable(DBSkeleton):
-    __tablename__ = "generated_tests"
+class GeneratedRecipeTable(DBSkeleton):
+    __tablename__ = "generated_recipes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     flow_id: Mapped[str] = mapped_column(
@@ -87,35 +86,13 @@ class GeneratedTestsTable(DBSkeleton):
         unique=True,
         index=True,
     )
-    
-    bdd_text: Mapped[str] = mapped_column(Text, nullable=False)
-    playwright_text: Mapped[str] = mapped_column(Text, nullable=False)
-    model_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    agent_recipe: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    flow: Mapped["FlowsTable"] = relationship(back_populates="generated_test")
-
-
-class AgentRecipeTable(DBSkeleton):
-    __tablename__ = "agent_recipes"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    flow_id: Mapped[str] = mapped_column(
-        ForeignKey("flows.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-    goal: Mapped[str] = mapped_column(Text, nullable=False)
-    success_criteria: Mapped[str] = mapped_column(Text, nullable=False)
-    steps: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    flow: Mapped["FlowsTable"] = relationship(back_populates="agent_recipe")
-    schedule: Mapped["AgentScheduleTable | None"] = relationship(back_populates="recipe", uselist=False, cascade="all, delete-orphan")
+    flow: Mapped["FlowsTable"] = relationship(back_populates="generated_recipe")
 
 
 class AgentRunTable(DBSkeleton):
@@ -142,7 +119,7 @@ class AgentScheduleTable(DBSkeleton):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     flow_id: Mapped[str] = mapped_column(
-        ForeignKey("agent_recipes.flow_id", ondelete="CASCADE"),
+        ForeignKey("flows.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
@@ -154,8 +131,6 @@ class AgentScheduleTable(DBSkeleton):
     )
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    recipe: Mapped["AgentRecipeTable"] = relationship(back_populates="schedule")
 
 
 class FlowSecretTable(DBSkeleton):
@@ -176,6 +151,20 @@ class PostgresDB:
         self.db_url = database_url
         self.engine = create_engine(self.db_url, pool_pre_ping=True)
 
+    def ensure_schema(self) -> None:
+        """Create missing tables and enum values for partially initialized dev DBs."""
+        with self.engine.begin() as connection:
+            connection.execute(text("""
+                DO $$ BEGIN
+                    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'flow_status') THEN
+                        ALTER TYPE flow_status ADD VALUE IF NOT EXISTS 'agent_ready';
+                        ALTER TYPE flow_status ADD VALUE IF NOT EXISTS 'agent_running';
+                    END IF;
+                END $$;
+            """))
+
+        DBSkeleton.metadata.create_all(self.engine)
+
     @contextmanager
     def get_session(self) -> Iterator[Session]:
         session = Session(self.engine)
@@ -183,4 +172,3 @@ class PostgresDB:
             yield session
         finally:
             session.close()
-

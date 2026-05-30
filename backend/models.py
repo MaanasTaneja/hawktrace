@@ -80,15 +80,6 @@ class FlowDeleteRead(BaseModel):
     deleted: str
 
 
-# --- Agent models ---
-
-class AgentLaunchRead(BaseModel):
-    flow_id: str
-    goal: str
-    success_criteria: str
-    steps: list[dict]
-
-
 class AgentRunTriggerRead(BaseModel):
     run_id: str
     flow_id: str

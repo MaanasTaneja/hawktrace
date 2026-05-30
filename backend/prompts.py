@@ -19,7 +19,7 @@ Return ONLY valid JSON. No markdown, no explanation, no code blocks. Just the ra
     {
       "step_id": <integer starting at 1>,
       "action_type": "<one of: navigate | click | fill | scroll | select>",
-      "description": "Plain english description of what this step does",
+      "description": "Specific plain-English description of the exact user action and target",
       "url": "<full URL for navigate steps — null for all other action types>",
       "target": {
         "role": "<ARIA role of the element: button | link | textbox | combobox | checkbox | menuitem | etc. — null if not applicable>",
@@ -51,6 +51,11 @@ Return ONLY valid JSON. No markdown, no explanation, no code blocks. Just the ra
 - `fill` — the user typed into a text input, textarea, or search box
 - `scroll` — the user scrolled the page
 - `select` — the user chose an option from a dropdown or select element
+
+**description:**
+- Be specific and user-facing. Name the concrete target and intent.
+- Good: "Enter invalid email in the email address field", "Click Continue to submit the form", "Open the checkout page".
+- Bad: "Standard processing applied", "Standard navigation applied", "Process the step", "Click element".
 
 **target:**
 - Only populate fields that are relevant to the action type. For `navigate` and `scroll`, all target fields are null.

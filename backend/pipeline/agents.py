@@ -1,25 +1,20 @@
-import asyncio
 import json
-import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from auth import get_current_user
+from database.ht_agents import get_runs_for_flow, upsert_agent_schedule
 from database.ht_flows import (
     db,
-    get_agent_recipe,
     get_flow_by_id,
-    get_runs_for_flow,
+    get_generated_recipe_by_flow_id,
     get_secrets_for_flow,
-    set_agent_active,
-    upsert_agent_schedule,
     upsert_secret,
 )
 from database.ht_postgres import AgentRunTable, ScheduleType
 from models import (
-    AgentLaunchRead,
     AgentRunReportRead,
     AgentRunSummary,
     AgentRunTriggerRead,
@@ -35,39 +30,6 @@ router = APIRouter(prefix="/agents")
 
 
 # ------------------------------------------------------------------ #
-#  Launch — generate recipe for a flow                                #
-# ------------------------------------------------------------------ #
-
-@router.post("/flows/{flow_id}/launch", response_model=AgentLaunchRead)
-async def launch_agent(flow_id: str, current_user: UserRead = Depends(get_current_user)):
-    from pipeline.agent_pipeline import launch_agent_for_flow
-
-    with db.get_session() as session:
-        flow = get_flow_by_id(session, flow_id)
-        if not flow or flow.user_id != current_user.id:
-            raise HTTPException(status_code=404, detail="Flow not found")
-
-    loop = asyncio.get_event_loop()
-    try:
-        recipe = await loop.run_in_executor(
-            None, launch_agent_for_flow, flow_id, current_user.id
-        )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        tb = traceback.format_exc()
-        print(f"[agents] launch error for flow {flow_id}:\n{tb}")
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
-
-    return AgentLaunchRead(
-        flow_id=flow_id,
-        goal=recipe["goal"],
-        success_criteria=recipe["success_criteria"],
-        steps=recipe["steps"],
-    )
-
-
-# ------------------------------------------------------------------ #
 #  Run now                                                            #
 # ------------------------------------------------------------------ #
 
@@ -78,11 +40,11 @@ def run_agent_now(flow_id: str, current_user: UserRead = Depends(get_current_use
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
 
-        recipe = get_agent_recipe(session, flow_id)
+        recipe = get_generated_recipe_by_flow_id(session, flow_id)
         if not recipe:
             raise HTTPException(
                 status_code=400,
-                detail="No agent recipe found. Launch the agent first."
+                detail="No generated recipe found. Analyze the flow first."
             )
 
     task = run_qa_agent.delay(flow_id=flow_id, triggered_by="manual")
@@ -113,11 +75,11 @@ def set_schedule(
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
 
-        recipe = get_agent_recipe(session, flow_id)
+        recipe = get_generated_recipe_by_flow_id(session, flow_id)
         if not recipe:
             raise HTTPException(
                 status_code=400,
-                detail="No agent recipe found. Launch the agent first."
+                detail="No generated recipe found. Analyze the flow first."
             )
 
         schedule_type = ScheduleType(body.schedule_type)
@@ -234,26 +196,6 @@ def get_run_video(
         p = Path(str(video_path))
         media_type = "video/mp4" if p.suffix == ".mp4" else "video/webm"
         return FileResponse(str(p), media_type=media_type)
-
-
-# ------------------------------------------------------------------ #
-#  Active toggle                                                      #
-# ------------------------------------------------------------------ #
-
-@router.post("/{flow_id}/active", response_model=dict)
-def toggle_active(
-    flow_id: str,
-    body: dict,
-    current_user: UserRead = Depends(get_current_user),
-):
-    with db.get_session() as session:
-        flow = get_flow_by_id(session, flow_id)
-        if not flow or flow.user_id != current_user.id:
-            raise HTTPException(status_code=404, detail="Flow not found")
-        recipe = set_agent_active(session, flow_id, bool(body.get("is_active", True)))
-        if not recipe:
-            raise HTTPException(status_code=404, detail="No agent recipe found")
-        return {"flow_id": flow_id, "is_active": recipe.is_active}
 
 
 # ------------------------------------------------------------------ #

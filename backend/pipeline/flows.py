@@ -1,4 +1,3 @@
-import asyncio
 import re
 import shutil
 from pathlib import Path
@@ -7,14 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
 from auth import get_current_user
+from database.ht_agents import get_latest_run_for_flow, get_runs_for_flow
 from database.ht_flows import (
     db,
     delete_flow as db_delete_flow,
     get_flow_by_id,
     get_flows_for_user,
-    get_latest_run_for_flow,
-    get_runs_for_flow,
-    get_tests_by_flow_id,
+    get_generated_recipe_by_flow_id,
     load_flow_events,
     rename_flow as db_rename_flow,
 )
@@ -55,9 +53,9 @@ def list_flows(current_user: UserRead = Depends(get_current_user)):
                 started_at=row.started_at.timestamp(),
                 frame_count=row.frame_count,
                 event_count=row.event_count,
-                has_tests=row.generated_test is not None,
-                has_agent=row.agent_recipe is not None,
-                agent_active=row.agent_recipe.is_active if row.agent_recipe else True,
+                has_tests=row.generated_recipe is not None,
+                has_agent=row.generated_recipe is not None,
+                agent_active=True,
                 last_run_status=latest_run.status.value if latest_run else None,
             ))
         return result
@@ -123,6 +121,7 @@ def get_video(
 
 
 @router.get("/{flow_id}/events", response_model=FlowEventsRead)
+#get events also from db... get the file events path, and then load flow evemnts into a events dict
 def get_events(flow_id: str, current_user: UserRead = Depends(get_current_user)):
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
@@ -157,24 +156,23 @@ def get_tests(flow_id: str, current_user: UserRead = Depends(get_current_user)):
         flow = get_flow_by_id(session, flow_id)
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
-        #need to rename this shit? get_video_analysis or recipe.
-        tests = get_tests_by_flow_id(session, flow_id)
-        #fetch the tests?
+        
+        #get generated recipie from flow id.
+        generated_recipe = get_generated_recipe_by_flow_id(session, flow_id)
 
-        if not tests:
+        if not generated_recipe:
             raise HTTPException(status_code=404, detail="Analysis not generated yet")
         try:
-            stored = _json.loads(tests.bdd_text)
+            stored = _json.loads(generated_recipe.agent_recipe)
+
             if isinstance(stored, dict) and "steps" in stored:
-                from database.ht_flows import get_agent_recipe
-                recipe = get_agent_recipe(session, flow_id)
                 return FlowAnalysisRead(
                     flow_id=flow_id,
                     goal=stored.get("goal"),
                     success_criteria=stored.get("success_criteria"),
                     observations=[],
                     steps=stored.get("steps"),
-                    agent_active=recipe.is_active if recipe else True,
+                    agent_active=True,
                 )
             elif isinstance(stored, dict):
                 # Old format: {goal, success_criteria, observations}
@@ -209,6 +207,7 @@ def rename_flow(
 
 @router.delete("/{flow_id}", response_model=FlowDeleteRead)
 def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)):
+
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
         if not flow or flow.user_id != current_user.id:
@@ -232,38 +231,70 @@ def delete_flow(flow_id: str, current_user: UserRead = Depends(get_current_user)
     return FlowDeleteRead(deleted=flow_id)
 
 
-#analyze flow video with Gemini — returns visual observations per event
-#this is th eone that reecieves the analyze button call.
+#i dont like this, this should be a seprate file, both functions i think.
+
 
 @router.post("/{flow_id}/generate_tests")
-async def generate_tests(
+def generate_tests(
     flow_id: str,
     body: AnalyzeBody = AnalyzeBody(),
     current_user: UserRead = Depends(get_current_user),
 ):
-    import traceback
-    #here we call the analyze flow video witht he long running task, and use asyncio to call it.
-    #so basically need to make the test generator function into a celery task, and we launch
-    #celery task here
-    #provide another route to poll reuslts. but thats it.
-    #insde the cleery task we will also update redis to store the progress of the agent recipie creation.
-
-    from .test_generator import generate_agent_recipe
+    
+    #call the async task celery to generate agent recipie.
+    from tasks import generate_agent_recipe_task
 
     with db.get_session() as session:
         flow = get_flow_by_id(session, flow_id)
         if not flow or flow.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Flow not found")
 
-    loop = asyncio.get_event_loop()
-    try:
-        result = await loop.run_in_executor(
-            None, generate_agent_recipe, flow_id
-        )
-        return result
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        tb = traceback.format_exc()
-        print(f"[analyze_flow] ERROR for flow {flow_id}:\n{tb}")
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    task = generate_agent_recipe_task.delay(flow_id=flow_id)
+    #run async using delay.
+    return {
+        "task_id": task.id,
+        "flow_id": flow_id,
+        "status": "queued",
+    }
+#returns only task id and which flow this task is currently runnign on.
+
+
+#poll our generate test task id for status.
+@router.get("/{flow_id}/generate_tests/{task_id}")
+def get_generate_tests_status(
+    flow_id: str,
+    task_id: str,
+    current_user: UserRead = Depends(get_current_user),
+):
+    from tasks import celery_app
+
+    with db.get_session() as session:
+        flow = get_flow_by_id(session, flow_id)
+        if not flow or flow.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Flow not found")
+
+    task = celery_app.AsyncResult(task_id)
+
+
+    if task.state == "SUCCESS":
+        result = task.result or {}
+        return {
+            "task_id": task_id,
+            "flow_id": flow_id,
+            "status": "completed",
+            "recipe": result.get("recipe") if isinstance(result, dict) else None,
+        }
+    
+    if task.state == "FAILURE":
+        return {
+            "task_id": task_id,
+            "flow_id": flow_id,
+            "status": "failed",
+            "error": str(task.result),
+        }
+    
+    return {
+        "task_id": task_id,
+        "flow_id": flow_id,
+        "status": task.state.lower(),
+    }

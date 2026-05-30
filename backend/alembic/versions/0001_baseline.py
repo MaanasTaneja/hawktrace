@@ -6,6 +6,7 @@ Create Date: 2026-05-24
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ENUM as PgEnum
 
 revision = "0001"
 down_revision = None
@@ -27,11 +28,13 @@ def upgrade() -> None:
     )
     op.create_index("ix_users_email", "users", ["email"])
 
-    flow_status = sa.Enum(
-        "tests_not_generated", "tests_generated",
-        name="flow_status",
-    )
-    flow_status.create(op.get_bind())
+    op.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'flow_status') THEN
+                CREATE TYPE flow_status AS ENUM ('tests_not_generated', 'tests_generated');
+            END IF;
+        END $$;
+    """)
 
     op.create_table(
         "flows",
@@ -44,7 +47,11 @@ def upgrade() -> None:
         sa.Column("event_count", sa.Integer(), nullable=False),
         sa.Column("events_path", sa.Text(), nullable=False),
         sa.Column("video_path", sa.Text(), nullable=False),
-        sa.Column("status", sa.Enum("tests_not_generated", "tests_generated", name="flow_status"), nullable=False),
+        sa.Column(
+            "status",
+            PgEnum("tests_not_generated", "tests_generated", name="flow_status", create_type=False),
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),

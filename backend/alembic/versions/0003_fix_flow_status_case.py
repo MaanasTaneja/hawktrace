@@ -13,11 +13,42 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Rename the enum values (PostgreSQL 10+ supports RENAME VALUE)
-    op.execute("ALTER TYPE flow_status RENAME VALUE 'TESTS_NOT_GENERATED' TO 'tests_not_generated'")
-    op.execute("ALTER TYPE flow_status RENAME VALUE 'TESTS_GENERATED' TO 'tests_generated'")
+    op.execute("""
+        DO $$ BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_enum e
+                JOIN pg_type t ON t.oid = e.enumtypid
+                WHERE t.typname = 'flow_status' AND e.enumlabel = 'TESTS_NOT_GENERATED'
+            ) THEN
+                ALTER TYPE flow_status RENAME VALUE 'TESTS_NOT_GENERATED' TO 'tests_not_generated';
+            END IF;
+            IF EXISTS (
+                SELECT 1 FROM pg_enum e
+                JOIN pg_type t ON t.oid = e.enumtypid
+                WHERE t.typname = 'flow_status' AND e.enumlabel = 'TESTS_GENERATED'
+            ) THEN
+                ALTER TYPE flow_status RENAME VALUE 'TESTS_GENERATED' TO 'tests_generated';
+            END IF;
+        END $$;
+    """)
 
 
 def downgrade() -> None:
-    op.execute("ALTER TYPE flow_status RENAME VALUE 'tests_not_generated' TO 'TESTS_NOT_GENERATED'")
-    op.execute("ALTER TYPE flow_status RENAME VALUE 'tests_generated' TO 'TESTS_GENERATED'")
+    op.execute("""
+        DO $$ BEGIN
+            IF EXISTS (
+                SELECT 1 FROM pg_enum e
+                JOIN pg_type t ON t.oid = e.enumtypid
+                WHERE t.typname = 'flow_status' AND e.enumlabel = 'tests_not_generated'
+            ) THEN
+                ALTER TYPE flow_status RENAME VALUE 'tests_not_generated' TO 'TESTS_NOT_GENERATED';
+            END IF;
+            IF EXISTS (
+                SELECT 1 FROM pg_enum e
+                JOIN pg_type t ON t.oid = e.enumtypid
+                WHERE t.typname = 'flow_status' AND e.enumlabel = 'tests_generated'
+            ) THEN
+                ALTER TYPE flow_status RENAME VALUE 'tests_generated' TO 'TESTS_GENERATED';
+            END IF;
+        END $$;
+    """)

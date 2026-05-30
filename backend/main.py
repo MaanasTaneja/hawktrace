@@ -6,12 +6,14 @@ from pipeline.browser_session import router as browser_router
 from pipeline.flows import router as flows_router
 from pipeline.agents import router as agents_router
 from users.users import user_router
+from database.ht_flows import db
 
 load_dotenv()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    db.ensure_schema()
     app.state.runway_client = None
     app.state.elevenlabs_client = None
     yield

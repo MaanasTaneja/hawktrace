@@ -8,8 +8,14 @@ from google import genai as google_genai
 from google.genai import types as google_types
 from langgraph.graph import END, START, StateGraph
 
-from autonomy.tools.playwright_tools import PlaywrightSession
+from agent.playwright_tools import PlaywrightSession
 
+'''
+okay this does not seem ot use any of my preious abstractions in creating a new agent.
+base state agent is not being used, its just standard langgraph, thats been wired up.
+qa agent...
+
+'''
 
 class QAAgentState(TypedDict):
     recipe: dict
@@ -36,6 +42,7 @@ class QAAgent:
         workflow = StateGraph(QAAgentState)
         workflow.add_node("run_step", self._run_step)
         workflow.add_node("build_report", self._build_report)
+
         workflow.add_edge(START, "run_step")
         workflow.add_conditional_edges("run_step", self._route, {
             "continue": "run_step",
@@ -169,6 +176,11 @@ class QAAgent:
         base = {
             "step_id": step["step_id"],
             "description": step["description"],
+            "action_type": step.get("action_type"),
+            "target": step.get("target") or {},
+            "value": step.get("value"),
+            "url": step.get("url"),
+            "expected_visual": tier3_visual,
             "exec_result": exec_result,
             "failure_reason": None,
             "tier_used": None,

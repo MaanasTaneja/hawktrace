@@ -122,10 +122,6 @@ def _extract_ws_token(websocket: WebSocket) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# WebSocket handler
-# ---------------------------------------------------------------------------
-
 @router.websocket("/ws/browser")
 async def browser_session(websocket: WebSocket):
     await websocket.accept()
@@ -228,15 +224,22 @@ async def browser_session(websocket: WebSocket):
                             result = await loop.run_in_executor(None, recorder.stop_fast)
                             await websocket.send_json({"type": "flow_ended", **result})
                             fid = result["flow_id"]
+                            from tasks import celery_app, encode_flow_video_task
+                            encode_task = encode_flow_video_task.delay(flow_id=fid)
 
-                            async def _encode_then_notify(flow_id=fid):
-                                await loop.run_in_executor(None, recorder.encode_and_cleanup)
-                                try:
-                                    await websocket.send_json({"type": "mp4_ready", "flow_id": flow_id})
-                                except Exception:
-                                    pass
+                            async def _notify_when_encoded(flow_id=fid, task_id=encode_task.id):
+                                while True:
+                                    task = celery_app.AsyncResult(task_id)
+                                    if task.ready():
+                                        try:
+                                            msg_type = "mp4_ready" if task.successful() else "mp4_failed"
+                                            await websocket.send_json({"type": msg_type, "flow_id": flow_id})
+                                        except Exception:
+                                            pass
+                                        return
+                                    await asyncio.sleep(1)
 
-                            asyncio.create_task(_encode_then_notify())
+                            asyncio.create_task(_notify_when_encoded())
                         except Exception as e:
                             print(f"[flow] stop error: {e}")
                             await websocket.send_json(

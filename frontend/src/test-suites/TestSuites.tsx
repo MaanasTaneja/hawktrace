@@ -11,7 +11,6 @@ interface FlowMeta {
   frame_count: number;
   event_count: number;
   has_tests: boolean;
-  has_agent: boolean;
   agent_active: boolean;
   last_run_status?: string | null;
   started_at: number;
@@ -85,7 +84,7 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
   const [storedGoal, setStoredGoal] = useState<string | null>(null);
   const [storedSuccessCriteria, setStoredSuccessCriteria] = useState<string | null>(null);
   const [generationStage, setGenerationStage] = useState<GenerationStage>('idle');
-  const [agentStage, setAgentStage] = useState<'idle' | 'launching' | 'ready' | 'running' | 'error'>('idle');
+  const [agentStage, setAgentStage] = useState<'idle' | 'ready' | 'running' | 'error'>('idle');
   const [agentRecipe, setAgentRecipe] = useState<AgentRecipe | null>(null);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
@@ -291,12 +290,44 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
         body: JSON.stringify({ goal: goal || null, success_criteria: successCriteria || null }),
       });
       if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
-      console.log('[HawkTrace] flow analysis (fresh):', data);
-      setAgentRecipe(data);
-      setGenerationStage('done');
-      loadFlows();
+      const queued = await res.json();
+      const taskId = queued.task_id;
+      const flowId = selectedFlowId;
+      let attempts = 0;
+
+      const poll = async () => {
+        try {
+          attempts++;
+          const statusRes = await authFetch(`${BACKEND}/flows/${flowId}/generate_tests/${taskId}`);
+          if (!statusRes.ok) throw new Error('Failed');
+          const status = await statusRes.json();
+
+          if (status.status === 'completed') {
+            if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
+            console.log('[HawkTrace] flow analysis (fresh):', status.recipe);
+            setAgentRecipe(status.recipe);
+            setAgentStage('ready');
+            setGenerationStage('done');
+            loadFlows();
+            return;
+          }
+
+          if (status.status === 'failed') {
+            throw new Error(status.error || 'Generation failed');
+          }
+
+          if (attempts >= 90) {
+            throw new Error('Generation timed out');
+          }
+
+          setTimeout(poll, 4000);
+        } catch {
+          if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
+          setGenerationStage('error');
+        }
+      };
+
+      setTimeout(poll, 3000);
     } catch {
       if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
       setGenerationStage('error');
@@ -304,21 +335,6 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
   };
 
   useEffect(() => () => { if (stageTimerRef.current) clearTimeout(stageTimerRef.current); }, []);
-
-  const handleLaunchAgent = async () => {
-    if (!selectedFlowId) return;
-    setAgentStage('launching');
-    try {
-      const res = await authFetch(`${BACKEND}/agents/flows/${selectedFlowId}/launch`, { method: 'POST' });
-      if (!res.ok) throw new Error('Failed');
-      const recipe: AgentRecipe = await res.json();
-      setAgentRecipe(recipe);
-      setAgentStage('ready');
-      loadFlows();
-    } catch {
-      setAgentStage('error');
-    }
-  };
 
   const handleRunNow = async () => {
     if (!selectedFlowId) return;
@@ -415,6 +431,35 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
     if (type === 'scroll') return <ChevronsDown size={12} />;
     if (type === 'keydown') return <Keyboard size={12} />;
     return null;
+  };
+
+  const isGenericStepText = (text?: string) => {
+    if (!text) return true;
+    return /^(standard|process|processing|click element|perform action)/i.test(text.trim());
+  };
+
+  const stepTargetText = (step: any) => {
+    const target = step?.target ?? {};
+    return target.label || target.placeholder || target.fallback_text || step.url || '';
+  };
+
+  const stepTitle = (step: any, index: number) => {
+    if (!isGenericStepText(step?.description)) return step.description;
+    if (!step?.action_type && step?.description) return step.description;
+    const target = stepTargetText(step);
+    if (step?.action_type === 'navigate') return `Navigate to ${target || step.url || 'the starting page'}`;
+    if (step?.action_type === 'fill') return `Fill ${target || 'input field'}`;
+    if (step?.action_type === 'click') return `Click ${target || 'target element'}`;
+    if (step?.action_type === 'scroll') return 'Scroll the page';
+    if (step?.action_type === 'select') return `Select ${target || 'an option'}`;
+    return `Step ${index + 1}`;
+  };
+
+  const tierLabel = (tier?: string) => {
+    if (!tier) return '';
+    if (tier === 'exec') return 'Execution';
+    const match = tier.match(/^tier(\d+)$/);
+    return match ? `Tier ${match[1]}` : tier;
   };
 
   return (
@@ -726,37 +771,9 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                   transition={{ duration: 0.4 }}
                   className="space-y-3"
                 >
-                  {/* Launch Agent banner */}
-                  {agentStage === 'idle' && (
-                    <div className="bg-white border border-sand rounded-2xl p-6 shadow-sm flex items-center justify-between gap-4 mb-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-burnt/10 border border-burnt/20 flex items-center justify-center shrink-0">
-                          <Bot size={18} className="text-burnt" />
-                        </div>
-                        <div>
-                          <p className="text-[14px] font-serif font-bold text-ink">Launch QA Agent</p>
-                          <p className="text-[12px] font-sans text-mid mt-0.5">Turn this recording into an autonomous test that runs on a schedule</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={handleLaunchAgent}
-                        className="shrink-0 bg-burnt/10 border border-burnt/20 text-burnt font-sans font-bold px-5 py-2.5 rounded-full hover:bg-burnt/20 transition-all text-[13px]"
-                      >
-                        Launch Agent
-                      </button>
-                    </div>
-                  )}
-
-                  {agentStage === 'launching' && (
-                    <div className="bg-white border border-sand rounded-2xl p-6 shadow-sm flex items-center gap-4 mb-2">
-                      <Loader2 size={18} className="text-burnt animate-spin shrink-0" />
-                      <p className="text-[13px] font-sans text-mid">Generating agent recipe from your recording…</p>
-                    </div>
-                  )}
-
                   {agentStage === 'error' && (
                     <div className="bg-white border border-sand rounded-2xl p-6 shadow-sm flex items-center justify-between gap-4 mb-2">
-                      <p className="text-[13px] font-sans text-mid">Agent launch failed.</p>
+                      <p className="text-[13px] font-sans text-mid">Agent run failed to start.</p>
                       <button onClick={() => setAgentStage('idle')} className="text-[12px] font-sans font-bold text-burnt underline underline-offset-4">Retry</button>
                     </div>
                   )}
@@ -790,29 +807,10 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                         <div className="flex items-center gap-1.5 shrink-0 ml-4">
                           <button
                             onClick={handleRunNow}
-                            disabled={agentStage === 'running' || !agentActive}
+                            disabled={agentStage === 'running'}
                             className="flex items-center gap-1 bg-burnt/10 border border-burnt/20 text-burnt font-sans font-bold px-3 py-1.5 rounded-full hover:bg-burnt/20 transition-all text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {agentStage === 'running' ? <><Loader2 size={10} className="animate-spin" /> Running…</> : <><Play size={10} /> Run Now</>}
-                          </button>
-                          <button
-                            onClick={async () => {
-                              const next = !agentActive;
-                              setAgentActive(next);
-                              if (!next) handleSetSchedule('none');
-                              if (selectedFlowId) {
-                                await authFetch(`${BACKEND}/agents/${selectedFlowId}/active`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ is_active: next }),
-                                });
-                                loadFlows();
-                              }
-                            }}
-                            disabled={agentStage === 'running'}
-                            className="text-[11px] font-sans font-bold px-3 py-1.5 rounded-full border border-sand text-mid hover:border-burnt/30 hover:text-burnt transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            {agentActive ? 'Deactivate' : 'Activate'}
                           </button>
                           <div className="w-px h-4 bg-sand mx-0.5" />
                           <button
@@ -968,13 +966,19 @@ export const TestSuites: React.FC<TestSuitesProps> = ({ onBack, initialFlowId })
                                                   <XCircle size={13} className="text-red-500 shrink-0 mt-0.5" />
                                                 )}
                                                 <div className="flex-1 min-w-0">
-                                                  <p className="text-[12px] font-sans text-ink">{step.description ?? `Step ${i + 1}`}</p>
+                                                  <p className="text-[12px] font-sans text-ink">{stepTitle(step, i)}</p>
+                                                  {stepTargetText(step) && step.action_type !== 'navigate' && (
+                                                    <p className="text-[11px] font-sans text-dim mt-0.5">{step.action_type} · {stepTargetText(step)}</p>
+                                                  )}
+                                                  {step.expected_visual && (
+                                                    <p className="text-[11px] font-sans text-mid mt-0.5 leading-relaxed">{step.expected_visual}</p>
+                                                  )}
                                                   {step.failure_reason && (
                                                     <p className="text-[11px] font-sans text-red-500 mt-0.5">{step.failure_reason}</p>
                                                   )}
                                                 </div>
                                                 {step.tier_used && (
-                                                  <span className="text-[9px] font-mono text-dim shrink-0 mt-0.5">T{step.tier_used}</span>
+                                                  <span className="text-[9px] font-mono text-dim shrink-0 mt-0.5">{tierLabel(step.tier_used)}</span>
                                                 )}
                                               </div>
                                             ))}

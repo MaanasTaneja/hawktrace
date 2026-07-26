@@ -41,12 +41,6 @@ export function Navbar({ onSignInClick, onGetStarted, onAbout }: NavbarProps) {
 
         {/* Center: Nav links — desktop only */}
         <div className="hidden md:flex items-center gap-8 text-[13px] text-mid font-sans font-medium">
-          {['Docs', 'Blog'].map((link) => (
-            <a key={link} href="#" className="hover:text-ink transition-colors duration-200 relative group">
-              {link}
-              <span className="absolute -bottom-px left-0 w-0 h-px bg-burnt transition-all duration-200 group-hover:w-full" />
-            </a>
-          ))}
           <button onClick={onAbout} className="hover:text-ink transition-colors duration-200 relative group">
             About
             <span className="absolute -bottom-px left-0 w-0 h-px bg-burnt transition-all duration-200 group-hover:w-full" />
@@ -101,11 +95,6 @@ export function Navbar({ onSignInClick, onGetStarted, onAbout }: NavbarProps) {
               boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
             }}
           >
-            {['Docs', 'Blog'].map((link) => (
-              <a key={link} href="#" onClick={closeMenu} className="text-[14px] text-mid font-sans font-medium px-3 py-2 rounded-xl hover:bg-sand/60 hover:text-ink transition-colors">
-                {link}
-              </a>
-            ))}
             <button onClick={() => { onAbout(); closeMenu(); }} className="text-left text-[14px] text-mid font-sans font-medium px-3 py-2 rounded-xl hover:bg-sand/60 hover:text-ink transition-colors">
               About
             </button>

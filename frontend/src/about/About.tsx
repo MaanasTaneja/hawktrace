@@ -1,6 +1,7 @@
 import { motion, useScroll, useSpring, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import logo from '../assets/HawkTrace-Logo.png';
 
 interface AboutProps {
   onBack: () => void;
@@ -124,8 +125,9 @@ export function About({ onBack, onGetStarted }: AboutProps) {
             boxShadow: '0 4px 24px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
           }}
         >
-          <div className="flex items-center">
-            <span className="font-serif text-[1.1rem] font-bold tracking-tight text-ink">XXXX Labs</span>
+          <div className="flex items-center gap-2">
+            <img src={logo} alt="HawkTrace" className="h-6 w-auto" />
+            <span className="font-serif text-[1.1rem] font-bold tracking-tight text-ink">HawkTrace</span>
           </div>
           <button
             onClick={onBack}

@@ -41,6 +41,8 @@ class QAAgent:
     def _build_graph(self):
         workflow = StateGraph(QAAgentState)
         workflow.add_node("run_step", self._run_step)
+        #so this is a simple graph like this, its not react , its not plan execute agent
+        #its run step -> if not done then keep looping to run step , until done.
         workflow.add_node("build_report", self._build_report)
 
         workflow.add_edge(START, "run_step")
@@ -66,6 +68,7 @@ class QAAgent:
         print(f"[qa_agent] step {step['step_id']}/{len(steps)}: {step['description']}")
 
         exec_result = self._execute(step)
+        #main logic, execute result, and then verify the result.
         step_result = self._verify(step, exec_result)
 
         on_failure = step.get("on_failure", "continue")
@@ -109,6 +112,7 @@ class QAAgent:
     # ------------------------------------------------------------------ #
 
     def _route(self, state: QAAgentState) -> str:
+        #if abort then we can route to done state. (abort error message in run step)
         steps = state["recipe"]["steps"]
         if state.get("abort") or state["step_index"] >= len(steps):
             return "done"

@@ -13,7 +13,6 @@ const NAV_SECTIONS = [
   { id: 'the-problem',   label: 'The problem' },
   { id: 'our-approach',  label: 'Our approach' },
   { id: 'the-research',  label: 'The research' },
-  { id: 'get-in-touch',  label: 'Get in touch' },
 ];
 
 const researchPoints = [
@@ -203,7 +202,7 @@ export function About({ onBack, onGetStarted }: AboutProps) {
           className="rounded-2xl p-10 mb-3"
           style={{ border: '1px solid rgba(229,98,42,0.25)' }}
         >
-          <p className="font-mono text-[12px] text-burnt uppercase tracking-[0.3em] mb-5">XXXX Labs</p>
+          <p className="font-mono text-[12px] text-burnt uppercase tracking-[0.3em] mb-5">HawkTrace</p>
           <h1 className="font-serif text-[clamp(2.2rem,4vw,3.2rem)] font-bold text-ink leading-[1.08] tracking-[-0.02em] mb-6">
             We build autonomous agents for software quality.
           </h1>
@@ -297,7 +296,7 @@ export function About({ onBack, onGetStarted }: AboutProps) {
         </section>
 
         {/* The research */}
-        <section id="the-research" className="scroll-mt-28 mb-3">
+        <section id="the-research" className="scroll-mt-28 mb-16">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -339,35 +338,6 @@ export function About({ onBack, onGetStarted }: AboutProps) {
                 </motion.div>
               ))}
             </div>
-          </motion.div>
-        </section>
-
-        {/* Get in touch */}
-        <section id="get-in-touch" className="scroll-mt-28 mb-16">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="rounded-2xl p-10"
-            style={{ border: '1px solid rgba(229,98,42,0.25)' }}
-          >
-            <p className="font-mono text-[12px] text-burnt uppercase tracking-[0.3em] mb-3">Get in touch</p>
-            <SplitHeading
-              text="We want to hear from you."
-              className="font-serif text-[1.65rem] font-semibold text-ink leading-snug tracking-[-0.01em] mb-5"
-            />
-            <p className="font-sans text-[15px] text-mid leading-[1.8] mb-7">
-              We are always interested in talking to founders building fast, researchers thinking about autonomous systems, and engineers who care about software quality.
-            </p>
-            <motion.a
-              href="mailto:hello@xxxx.ai"
-              whileHover={{ x: 3 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-              className="inline-flex items-center gap-2 font-mono text-[13px] text-burnt hover:opacity-70 transition-opacity tracking-wide"
-            >
-              hello@xxxx.ai →
-            </motion.a>
           </motion.div>
         </section>
 

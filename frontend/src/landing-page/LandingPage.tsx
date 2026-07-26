@@ -118,7 +118,7 @@ export function LandingPage({ onSignInClick, onGetStarted, onAbout }: LandingPag
         <CTA onGetStarted={onGetStarted} />
       </div>
 
-      <Footer />
+      <Footer onAbout={onAbout} />
     </div>
   );
 }

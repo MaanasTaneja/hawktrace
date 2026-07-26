@@ -152,45 +152,57 @@ class FlowRecorder:
 
     def encode_and_cleanup(self):
         """Encode MP4 and delete raw frames. Run in a background thread."""
-        try:
-            self._encode_mp4()
-        except Exception as e:
-            print(f"[flow] mp4 encode error: {e}")
-        finally:
-            import shutil
-            if self.flow_dir and (self.flow_dir / "frames").exists():
-                shutil.rmtree(self.flow_dir / "frames")
+        assert self.flow_id is not None
+        encode_flow_video(self.flow_id)
 
     def _encode_mp4(self) -> Path:
-        import av
-        import numpy as np
-        from PIL import Image
+        assert self.flow_id is not None
+        return _encode_mp4_for_flow(self.flow_id)
 
-        frames_dir = self.flow_dir / "frames"
-        frame_files = sorted(frames_dir.glob("*.jpg"))
 
-        if not frame_files:
-            raise ValueError("No frames recorded in this flow")
+def encode_flow_video(flow_id: str) -> str:
+    """Encode a recorded flow's frames into MP4, then remove raw frames."""
+    flow_dir = FLOWS_DIR / flow_id
+    try:
+        return str(_encode_mp4_for_flow(flow_id))
+    finally:
+        import shutil
+        frames_dir = flow_dir / "frames"
+        if frames_dir.exists():
+            shutil.rmtree(frames_dir)
 
-        first = Image.open(frame_files[0]).convert("RGB")
-        width, height = first.size
 
-        mp4_path = self.flow_dir / f"{self.flow_id}.mp4"
-        container = av.open(str(mp4_path), mode="w")
-        stream = container.add_stream(codec_name="h264", rate=20)
-        stream.width = width
-        stream.height = height
-        stream.pix_fmt = "yuv420p"
+def _encode_mp4_for_flow(flow_id: str) -> Path:
+    import av
+    import numpy as np
+    from PIL import Image
 
-        for f in frame_files:
-            img = Image.open(f).convert("RGB")
-            frame = av.VideoFrame.from_ndarray(np.array(img), format="rgb24")
-            for packet in stream.encode(frame):
-                container.mux(packet)
+    flow_dir = FLOWS_DIR / flow_id
+    frames_dir = flow_dir / "frames"
+    frame_files = sorted(frames_dir.glob("*.jpg"))
 
-        for packet in stream.encode():
+    if not frame_files:
+        raise ValueError("No frames recorded in this flow")
+
+    first = Image.open(frame_files[0]).convert("RGB")
+    width, height = first.size
+
+    mp4_path = flow_dir / f"{flow_id}.mp4"
+    container = av.open(str(mp4_path), mode="w")
+    stream = container.add_stream(codec_name="h264", rate=20)
+    stream.width = width
+    stream.height = height
+    stream.pix_fmt = "yuv420p"
+
+    for f in frame_files:
+        img = Image.open(f).convert("RGB")
+        frame = av.VideoFrame.from_ndarray(np.array(img), format="rgb24")
+        for packet in stream.encode(frame):
             container.mux(packet)
 
-        container.close()
-        print(f"[flow] saved {mp4_path}")
-        return mp4_path
+    for packet in stream.encode():
+        container.mux(packet)
+
+    container.close()
+    print(f"[flow] saved {mp4_path}")
+    return mp4_path

@@ -44,5 +44,48 @@ services:
       - hawktrace_backend
     restart: unless-stopped
 
+  hawktrace_cache:
+    image: redis:latest
+    container_name: hawktrace_cache
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  hawktrace_celery_worker:
+    build: ./backend
+    container_name: hawktrace_celery_worker
+    command: celery -A tasks worker --loglevel=info --concurrency=2
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://ht_admin:ht_admin_pass@hawktrace_postgresdb:5432/ht_db
+      - REDIS_URL=redis://hawktrace_cache:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - hawktrace_postgresdb
+      - hawktrace_cache
+    restart: unless-stopped
+
+  hawktrace_celery_beat:
+    build: ./backend
+    container_name: hawktrace_celery_beat
+    command: celery -A tasks beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://ht_admin:ht_admin_pass@hawktrace_postgresdb:5432/ht_db
+      - REDIS_URL=redis://hawktrace_cache:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - hawktrace_postgresdb
+      - hawktrace_cache
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  redis_data:

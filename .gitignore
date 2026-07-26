@@ -10,8 +10,12 @@ __pycache__/
 venv/
 *.egg-info/
 
-# recorded flows
+# recorded flows and agent run artifacts
 backend/flows/
+backend/runs/
+
+# celery runtime
+backend/celerybeat-schedule
 
 # node
 frontend/node_modules/
@@ -19,3 +23,12 @@ frontend/.next/
 
 # misc
 .DS_Store
+
+# terraform local state and generated credentials
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+!terraform/*.tfvars.example
+terraform/*.pem
+terraform/ec2-user@*

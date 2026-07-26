@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Circle, Square, Monitor, Trash2, Pencil, Check, X } from 'lucide-react';
 import logo from '../assets/HawkTrace-Logo.png';
 
-import { BACKEND, authFetch, getToken } from '../api';
+import { BACKEND, authFetch, getToken, getWsBackend } from '../api';
 const BACKEND_HTTP = BACKEND;
 
 type ConnStatus = 'connecting' | 'connected' | 'disconnected';
@@ -92,7 +92,7 @@ export const BrowserSession: React.FC<BrowserSessionProps> = ({ onBack, onViewTe
       if (!mountedRef.current) return;
       setConnStatus('connecting');
       const token = getToken();
-      const wsUrl = `ws://localhost:8001/ws/browser${token ? `?token=${token}` : ''}`;
+      const wsUrl = `${getWsBackend()}/ws/browser${token ? `?token=${token}` : ''}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

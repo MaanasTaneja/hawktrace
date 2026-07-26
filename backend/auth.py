@@ -43,7 +43,7 @@ def create_jwt_token(user_model: UserRead) -> str:
     to_encode_payload = {
         "user_id" : user_model.id,
         "username" : user_model.username,
-        "exp" : datetime.now(timezone.utc) +  timedelta(hours=1)
+        "exp" : datetime.now(timezone.utc) +  timedelta(hours=3)
     }
 
     encoded_token = jwt.encode(to_encode_payload, JWT_SECRET_KEY, algorithm='HS256')

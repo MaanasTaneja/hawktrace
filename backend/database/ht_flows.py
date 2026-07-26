@@ -1,5 +1,6 @@
 import json
 import os
+from secrets_crypto import encrypt_secret, decrypt_secret
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -7,9 +8,10 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database.ht_postgres import (
+    FlowSecretTable,
     FlowStatus,
     FlowsTable,
-    GeneratedTestsTable,
+    GeneratedRecipeTable,
     PostgresDB,
     UserTable,
 )
@@ -41,11 +43,12 @@ def get_flows_for_user(session: Session, user_id: int, limit: int = 200) -> list
         .all()
     )
 
-#get flows absed on flow idf 
-def get_tests_by_flow_id(session: Session, flow_id: str) -> GeneratedTestsTable | None:
+#get flows absed on flow idf
+def get_generated_recipe_by_flow_id(session: Session, flow_id: str) -> GeneratedRecipeTable | None:
+    #why is therre no security measures for this?
     return (
-        session.query(GeneratedTestsTable)
-        .filter(GeneratedTestsTable.flow_id == flow_id)
+        session.query(GeneratedRecipeTable)
+        .filter(GeneratedRecipeTable.flow_id == flow_id)
         .first()
     )
 
@@ -71,36 +74,30 @@ def delete_flow(session: Session, flow_id: str) -> bool:
 
 
 
-#main logic where we uspert generated text need to change this to upsert flow information (json of flow desciprtin and agent receipe)
-def upsert_generated_tests(
+#main logic where we upsert the generated agent recipe JSON for a recorded flow.
+def upsert_generated_recipe(
     session: Session,
     flow_id: str,
-    bdd_text: str,
-    playwright_text: str,
-    model_name: str | None = None,
-) -> GeneratedTestsTable | None:
+    agent_recipe: str,
+) -> GeneratedRecipeTable | None:
     flow = get_flow_by_id(session, flow_id)
     if not flow:
         return None
 
-    tests = get_tests_by_flow_id(session, flow_id)
-    if tests is None:
-        tests = GeneratedTestsTable(
+    recipe = get_generated_recipe_by_flow_id(session, flow_id)
+    if recipe is None:
+        recipe = GeneratedRecipeTable(
             flow_id=flow_id,
-            bdd_text=bdd_text,
-            playwright_text=playwright_text,
-            model_name=model_name,
+            agent_recipe=agent_recipe,
         )
-        session.add(tests)
+        session.add(recipe)
     else:
-        tests.bdd_text = bdd_text
-        tests.playwright_text = playwright_text
-        tests.model_name = model_name
+        recipe.agent_recipe = agent_recipe
 
     flow.status = FlowStatus.TESTS_GENERATED
     session.commit()
-    session.refresh(tests)
-    return tests
+    session.refresh(recipe)
+    return recipe
 
 
 def load_flow_events(events_path: str) -> list[dict]:
@@ -115,8 +112,7 @@ def load_flow_events(events_path: str) -> list[dict]:
     return data
 
 
-#main upsert flow record into table, the uperset genertets test is an async operation that happens when user wants us to generatethe agent
-#keep tehm sperate. upsert agent repcie later.
+#main upsert flow record into table. Recipe generation is a separate async operation.
 def upsert_recorded_flow(
     session: Session,
     flow_id: str,
@@ -163,3 +159,39 @@ def upsert_recorded_flow(
     session.commit()
     session.refresh(flow)
     return flow
+
+
+# --- Flow secrets ---
+
+def get_secrets_for_flow(session: Session, flow_id: str) -> list[FlowSecretTable]:
+    return session.query(FlowSecretTable).filter_by(flow_id=flow_id).all()
+
+
+def upsert_secret(session: Session, flow_id: str, key: str, value: str) -> FlowSecretTable:
+    encrypted = encrypt_secret(value)
+    secret = (
+        session.query(FlowSecretTable)
+        .filter_by(flow_id=flow_id, key=key)
+        .first()
+    )
+    if secret is None:
+        secret = FlowSecretTable(flow_id=flow_id, key=key, value=encrypted)
+        session.add(secret)
+    else:
+        secret.value = encrypted
+    session.commit()
+    session.refresh(secret)
+    return secret
+
+
+def resolve_secrets(steps: list[dict], secrets: list[FlowSecretTable]) -> list[dict]:
+    """Substitute {{secret:KEY}} placeholders in step values with stored secrets."""
+    secret_map = {s.key: decrypt_secret(s.value) for s in secrets}
+    resolved = []
+    for step in steps:
+        s = dict(step)
+        if s.get("value") and isinstance(s["value"], str):
+            for key, val in secret_map.items():
+                s["value"] = s["value"].replace(f"{{{{secret:{key}}}}}", val)
+        resolved.append(s)
+    return resolved

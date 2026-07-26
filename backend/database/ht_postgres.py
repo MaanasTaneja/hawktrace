@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum as PyEnum
 from typing import Iterator
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -15,6 +15,18 @@ class DBSkeleton(DeclarativeBase):
 class FlowStatus(PyEnum):
     TESTS_NOT_GENERATED = "tests_not_generated"
     TESTS_GENERATED = "tests_generated"
+    AGENT_READY = "agent_ready"
+    AGENT_RUNNING = "agent_running"
+
+class AgentRunStatus(PyEnum):
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+
+class ScheduleType(PyEnum):
+    NONE = "none"
+    DAILY = "daily"
+    WEEKLY = "weekly"
 
 
 class UserTable(DBSkeleton):
@@ -50,7 +62,7 @@ class FlowsTable(DBSkeleton):
 
 
     status: Mapped[FlowStatus] = mapped_column(
-        Enum(FlowStatus, name="flow_status"),
+        Enum(FlowStatus, name="flow_status", values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
         default=FlowStatus.TESTS_NOT_GENERATED,
     )
@@ -61,11 +73,11 @@ class FlowsTable(DBSkeleton):
 
     user: Mapped["UserTable"] = relationship(back_populates="flows")
 
-    generated_test: Mapped["GeneratedTestsTable | None"] = relationship(back_populates="flow",uselist=False,cascade="all, delete-orphan",)
+    generated_recipe: Mapped["GeneratedRecipeTable | None"] = relationship(back_populates="flow", uselist=False, cascade="all, delete-orphan")
 
 
-class GeneratedTestsTable(DBSkeleton):
-    __tablename__ = "generated_tests"
+class GeneratedRecipeTable(DBSkeleton):
+    __tablename__ = "generated_recipes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     flow_id: Mapped[str] = mapped_column(
@@ -74,22 +86,84 @@ class GeneratedTestsTable(DBSkeleton):
         unique=True,
         index=True,
     )
-    
-    bdd_text: Mapped[str] = mapped_column(Text, nullable=False)
-    playwright_text: Mapped[str] = mapped_column(Text, nullable=False)
-    model_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    agent_recipe: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    flow: Mapped["FlowsTable"] = relationship(back_populates="generated_test")
+    flow: Mapped["FlowsTable"] = relationship(back_populates="generated_recipe")
+
+
+class AgentRunTable(DBSkeleton):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # UUID
+    flow_id: Mapped[str] = mapped_column(
+        ForeignKey("flows.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    triggered_by: Mapped[str] = mapped_column(String(20), nullable=False)  # "manual" or "scheduled"
+    status: Mapped[AgentRunStatus] = mapped_column(
+        Enum(AgentRunStatus, name="agent_run_status", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=AgentRunStatus.RUNNING,
+    )
+    report: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON report
+    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AgentScheduleTable(DBSkeleton):
+    __tablename__ = "agent_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    flow_id: Mapped[str] = mapped_column(
+        ForeignKey("flows.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    schedule_type: Mapped[ScheduleType] = mapped_column(
+        Enum(ScheduleType, name="schedule_type", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=ScheduleType.NONE,
+    )
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class FlowSecretTable(DBSkeleton):
+    __tablename__ = "flow_secrets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    flow_id: Mapped[str] = mapped_column(
+        ForeignKey("flows.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class PostgresDB:
-    def __init__(self, database_url: str, db_modelling: type[DeclarativeBase] = DBSkeleton):
+    def __init__(self, database_url: str):
         self.db_url = database_url
         self.engine = create_engine(self.db_url, pool_pre_ping=True)
-        db_modelling.metadata.create_all(self.engine)
+
+    def ensure_schema(self) -> None:
+        """Create missing tables and enum values for partially initialized dev DBs."""
+        with self.engine.begin() as connection:
+            connection.execute(text("""
+                DO $$ BEGIN
+                    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'flow_status') THEN
+                        ALTER TYPE flow_status ADD VALUE IF NOT EXISTS 'agent_ready';
+                        ALTER TYPE flow_status ADD VALUE IF NOT EXISTS 'agent_running';
+                    END IF;
+                END $$;
+            """))
+
+        DBSkeleton.metadata.create_all(self.engine)
 
     @contextmanager
     def get_session(self) -> Iterator[Session]:
@@ -98,4 +172,3 @@ class PostgresDB:
             yield session
         finally:
             session.close()
-

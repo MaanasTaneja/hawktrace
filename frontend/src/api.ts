@@ -1,4 +1,12 @@
-export const BACKEND = 'http://localhost:8001';
+export const BACKEND = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8001';
+
+export function getWsBackend(): string {
+  const configured = import.meta.env.VITE_BACKEND_WS_URL;
+  if (configured) return configured;
+  if (BACKEND.startsWith('http')) return BACKEND.replace(/^http/, 'ws');
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}`;
+}
 
 const TOKEN_KEY = 'hawktrace_token';
 const USER_KEY = 'hawktrace_user';
@@ -42,5 +50,11 @@ export function authFetch(url: string, options: RequestInit = {}): Promise<Respo
     ...(options.headers as Record<string, string> ?? {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(url, { ...options, headers });
+  return fetch(url, { ...options, headers }).then(res => {
+    if (res.status === 401) {
+      clearAuth();
+      window.location.reload();
+    }
+    return res;
+  });
 }

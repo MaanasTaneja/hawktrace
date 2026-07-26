@@ -6,47 +6,69 @@ interface CTAProps {
 
 export function CTA({ onGetStarted }: CTAProps) {
   return (
-    <section id="cta" className="py-24 px-6 bg-ink text-cream">
-      <div className="max-w-4xl mx-auto text-center">
+    <section
+      className="relative py-36 px-8"
+      style={{
+        backgroundImage: 'url(/new-1.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 bg-black/40" />
+
+      {/* Top separator */}
+      <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+
+      <div className="max-w-3xl mx-auto text-center relative z-10">
+        {/* Headline */}
         <motion.h2
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="font-serif text-[clamp(2.5rem,6vw,4.5rem)] leading-tight tracking-tight mb-6"
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="font-serif text-[clamp(2.4rem,5vw,4rem)] leading-[1.08] tracking-[-0.025em] text-white mb-12"
+          style={{ textShadow: '0 2px 16px rgba(0,0,0,0.5)' }}
         >
-          Stop shipping blind.
+          Stop finding bugs
+          <br />
+          from your users.
+          <br />
+          <span className="italic font-mono text-[25px]" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>Start catching them first.</span>
         </motion.h2>
-        
-        <motion.p
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.1 }}
-          className="text-dim text-[17px] max-w-lg mx-auto mb-10"
-        >
-          Your users shouldn't be your QA team. Record once, test forever.
-        </motion.p>
-        
+
+        {/* CTA Button */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 12, scale: 0.97 }}
+          whileInView={{ opacity: 1, y: 0, scale: 1 }}
           viewport={{ once: true }}
-          transition={{ delay: 0.2 }}
+          transition={{ duration: 0.55, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center gap-5"
         >
           <button
             onClick={onGetStarted}
-            className="bg-[#E5622A]/10 backdrop-blur-md border border-[#E5622A]/20 text-[#E5622A] text-sm font-medium px-8 py-3 rounded-full hover:bg-[#E5622A]/20 transition-all hover:-translate-y-0.5"
+            className="text-[14px] font-medium px-10 py-4 rounded-full active:scale-95 transition-all duration-200"
+            style={{
+              background: 'rgba(180,60,10,0.85)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(229,98,42,0.6)',
+              color: '#fff',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.35)',
+            }}
           >
-            Start recording
+            Get Started
           </button>
-          
-          <div className="mt-6 flex justify-center items-center gap-2 text-[12px] text-dim/60 font-medium font-sans">
-            <span>No credit card</span>
-            <span className="w-1 h-1 rounded-full bg-dim/30" />
-            <span>Setup in seconds</span>
-          </div>
+
+          {/* Subtext */}
+          <p className="font-mono text-[11px] text-white/70 tracking-wide" style={{ textShadow: '0 1px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7)' }}>
+            No credit card.&nbsp;&nbsp;No setup.&nbsp;&nbsp;Just a URL.
+          </p>
         </motion.div>
       </div>
+
+      {/* Bottom separator */}
+      <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
     </section>
   );
 }

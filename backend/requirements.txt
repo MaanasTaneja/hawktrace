@@ -10,6 +10,7 @@ langgraph
 langchain
 langchain-core
 langchain-openai
+langchain-google-genai
 
 google-genai
 openai
@@ -19,8 +20,14 @@ av
 numpy
 
 SQLAlchemy
+alembic
 psycopg[binary]
 PyJWT
 passlib[bcrypt]
 bcrypt==4.0.1
 python-multipart
+
+redis
+celery[redis]
+resend
+cryptography

@@ -73,3 +73,23 @@ html { scroll-behavior: smooth; }
   50%       { box-shadow: 0 0 0 2px #E5622A, 0 0 36px rgba(229, 98, 42, 0.55), 0 0 72px rgba(229, 98, 42, 0.25); }
 }
 .recording-glow { animation: recording-glow 2s ease-in-out infinite; }
+
+/* Thin scrollbars for flow sections */
+.flows-scroll::-webkit-scrollbar { width: 4px; }
+.flows-scroll::-webkit-scrollbar-track { background: transparent; }
+.flows-scroll::-webkit-scrollbar-thumb { background: rgba(229,98,42,0.25); border-radius: 2px; }
+.flows-scroll::-webkit-scrollbar-thumb:hover { background: rgba(229,98,42,0.45); }
+
+/* Hawk animations */
+@keyframes hawk-breathe {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.02); }
+}
+.hawk-breathe { animation: hawk-breathe 4s ease-in-out infinite; }
+
+@keyframes hawk-sway {
+  0%, 100% { transform: rotate(0deg); }
+  25%       { transform: rotate(0.5deg); }
+  75%       { transform: rotate(-0.5deg); }
+}
+.hawk-sway { animation: hawk-sway 3.5s ease-in-out infinite; }

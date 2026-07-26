@@ -36,13 +36,15 @@ def whoami(current_user: UserRead = Depends(get_current_user)):
 @user_router.post("/register")
 def register_user(user : UserCreate):
     if not user:
-        raise HTTPException(status_code=401, detail="no user payload in request!")
+        raise HTTPException(status_code=400, detail="No user payload in request.")
     
     #now we can register this user
     with db.get_session() as session:
         email = user.email
         if get_user_by_email(session, email):
-            raise HTTPException(status_code=401, detail="User Already Exists!")
+            raise HTTPException(status_code=409, detail="An account with this email already exists.")
+        if get_user_by_username(session, user.username):
+            raise HTTPException(status_code=409, detail="This username is already taken.")
         
         #if user doesnt exist we can hash password and sotre into db
         hashed_password = hash_password(user.password)
@@ -51,7 +53,7 @@ def register_user(user : UserCreate):
 
         new_user = insert_user(session, user) #gives out user read model right
         if not new_user:
-            raise HTTPException(status_code=401, detail="User Could not be inserted!!")
+            raise HTTPException(status_code=500, detail="User could not be created.")
         
     return new_user
 
@@ -75,7 +77,12 @@ def update_user(user : UserUpdate):
 
 
 
-#no need to impelmentdelete uyser, update user or anythign like that yet. just login shoudl work and registering should work,
-
+@user_router.delete("/me")
+def delete_account(current_user: UserRead = Depends(get_current_user)):
+    with db.get_session() as session:
+        success = delete_user(session, current_user.id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Could not delete account.")
+    return {"detail": "Account deleted."}
 
 

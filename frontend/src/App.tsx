@@ -6,10 +6,11 @@ import { Dashboard } from './dashboard/Dashboard';
 import { BrowserSession } from './browser-session/BrowserSession';
 import { TestSuites } from './test-suites/TestSuites';
 import { Settings } from './settings/Settings';
+import { About } from './about/About';
 import { getToken, getStoredUser, clearAuth, setToken, setStoredUser, type StoredUser } from './api';
 import type { UserProfile } from './onboarding/Onboarding';
 
-type View = 'landing' | 'signup' | 'signin' | 'dashboard' | 'browser-session' | 'test-suites' | 'settings';
+type View = 'landing' | 'signup' | 'signin' | 'dashboard' | 'browser-session' | 'test-suites' | 'settings' | 'about';
 
 function storedUserToProfile(user: StoredUser | null): UserProfile {
   return {
@@ -126,10 +127,20 @@ export function App() {
     );
   }
 
+  if (view === 'about') {
+    return (
+      <About
+        onBack={() => navigateTo('landing')}
+        onGetStarted={() => navigateTo('signup')}
+      />
+    );
+  }
+
   return (
     <LandingPage
       onSignInClick={() => navigateTo('signin')}
       onGetStarted={() => navigateTo('signup')}
+      onAbout={() => navigateTo('about')}
     />
   );
 }

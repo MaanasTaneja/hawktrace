@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import logo from '../../assets/HawkTrace-Logo.png';
 
 interface NavbarProps {
   onSignInClick: () => void;
@@ -30,10 +31,11 @@ export function Navbar({ onSignInClick, onGetStarted, onAbout }: NavbarProps) {
           boxShadow: '0 4px 24px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
         }}
       >
-        {/* Left: Lab name */}
-        <div className="flex flex-col leading-none">
+        {/* Left: Logo + name */}
+        <div className="flex items-center gap-2">
+          <img src={logo} alt="HawkTrace" className="h-6 w-auto md:h-7" />
           <span className="font-serif text-[1.2rem] md:text-[1.35rem] font-bold tracking-tight text-ink">
-            XXXX Labs
+            HawkTrace
           </span>
         </div>
 

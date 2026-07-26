@@ -17,7 +17,11 @@ config = context.config
 
 # DATABASE_URL env var takes precedence over alembic.ini
 database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/hawktrace")
-config.set_main_option("sqlalchemy.url", database_url)
+# Alembic stores this value in a ConfigParser, where percent signs trigger
+# interpolation. URL-encoded database credentials can legitimately contain
+# percent signs, so escape them for ConfigParser; consumers receive the
+# original single-percent URL.
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
